@@ -357,10 +357,15 @@ AbstractController::getPort(const std::string &if_name, PortID idx)
 void
 AbstractController::functionalMemoryRead(PacketPtr pkt)
 {
-    // read from mem. req. queue if write data is pending there
+    // Cache-only controllers (e.g. CorePair, L3Cache) have no memory request
+    // queue; skip memory access and let the directory handle it.
     MessageBuffer *req_queue = getMemReqQueue();
-    if (!req_queue || !req_queue->functionalRead(pkt))
-        memoryPort.sendFunctional(pkt);
+    if (!req_queue)
+        return;
+    if (!req_queue->functionalRead(pkt)) {
+        if (memoryPort.isConnected())
+            memoryPort.sendFunctional(pkt);
+    }
 }
 
 int
@@ -368,9 +373,13 @@ AbstractController::functionalMemoryWrite(PacketPtr pkt)
 {
     int num_functional_writes = 0;
 
-    // Update memory itself.
-    memoryPort.sendFunctional(pkt);
-    return num_functional_writes + 1;
+    // Only directory controllers (non-null memory request queue) write to
+    // backing memory; cache-only controllers skip this.
+    if (getMemReqQueue() && memoryPort.isConnected()) {
+        memoryPort.sendFunctional(pkt);
+        num_functional_writes++;
+    }
+    return num_functional_writes;
 }
 
 bool

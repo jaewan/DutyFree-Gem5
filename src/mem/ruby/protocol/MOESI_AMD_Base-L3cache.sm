@@ -193,7 +193,12 @@ machine(MachineType:L3Cache, "L3")
     if(is_valid(tbe)) {
       testAndRead(addr, tbe.DataBlk, pkt);
     } else {
-      functionalMemoryRead(pkt);
+      Entry cache_entry := getCacheEntry(addr);
+      if(is_valid(cache_entry)) {
+        testAndRead(addr, cache_entry.DataBlk, pkt);
+      } else {
+        functionalMemoryRead(pkt);
+      }
     }
   }
 
@@ -204,6 +209,12 @@ machine(MachineType:L3Cache, "L3")
     if(is_valid(tbe)) {
       num_functional_writes := num_functional_writes +
             testAndWrite(addr, tbe.DataBlk, pkt);
+    }
+
+    Entry cache_entry := getCacheEntry(addr);
+    if(is_valid(cache_entry)) {
+      num_functional_writes := num_functional_writes +
+            testAndWrite(addr, cache_entry.DataBlk, pkt);
     }
 
     num_functional_writes := num_functional_writes +

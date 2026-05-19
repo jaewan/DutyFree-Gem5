@@ -118,6 +118,8 @@ style_ignores = [
     # Ignore test data, as they are not code
     _re_ignore("^tests/(?:quick|long)/"),
     _re_ignore("^tests/test-progs/hello/bin/"),
+    # Ignore DutyFree test cases (not gem5 source)
+    _re_ignore("^testcase/"),
     # Only include Scons files and those with extensions that suggest source
     # code
     _re_only(

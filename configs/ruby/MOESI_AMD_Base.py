@@ -245,7 +245,7 @@ def define_options(parser):
 
 
 def create_system(
-    options, full_system, system, dma_devices, bootmem, ruby_system
+    options, full_system, system, dma_devices, bootmem, ruby_system, cpus=None
 ):
     if buildEnv["PROTOCOL"] != "MOESI_AMD_Base":
         panic("This script requires the MOESI_AMD_Base protocol.")
@@ -295,7 +295,7 @@ def create_system(
             )
             dir_ranges.append(addr_range)
 
-        dir_cntrl = DirCntrl(TCC_select_num_bits=0)
+        dir_cntrl = DirCntrl(TCC_select_num_bits=0, L2isWB=True)
         dir_cntrl.create(options, dir_ranges, ruby_system, system)
 
         # Connect the Directory controller to the ruby network
@@ -316,6 +316,12 @@ def create_system(
 
         dir_cntrl.triggerQueue = MessageBuffer(ordered=True)
         dir_cntrl.L3triggerQueue = MessageBuffer(ordered=True)
+
+        dir_cntrl.requestFromDMA = MessageBuffer(ordered=True)
+        dir_cntrl.requestFromDMA.in_port = ruby_system.network.out_port
+
+        dir_cntrl.responseToDMA = MessageBuffer()
+        dir_cntrl.responseToDMA.out_port = ruby_system.network.in_port
 
         dir_cntrl.requestToMemory = MessageBuffer()
         dir_cntrl.responseFromMemory = MessageBuffer()

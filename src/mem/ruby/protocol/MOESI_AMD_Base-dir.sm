@@ -1445,12 +1445,12 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     p_popRequestQueue;
   }
 
-  transition(U, VicClean) {L3TagArrayRead, L3DataArrayWrite} {
+  transition(U, VicClean) {L3TagArrayRead} {
     t_allocateTBE;
     w_sendResponseWBAck;
-    d_writeDataToMemory;
-    al_allocateL3Block;
-    pr_profileL3HitMiss; //Must come after al_allocateL3Block and before dt_deallocateTBE
+    // VicClean carries no data (Request_Control); memory already has a valid copy.
+    // Do NOT call d_writeDataToMemory or al_allocateL3Block here.
+    pr_profileL3HitMiss;
     wada_wakeUpAllDependentsAddr;
     dt_deallocateTBE;
     p_popRequestQueue;
