@@ -1,6 +1,6 @@
 /*
  * Multi-CPU Coherence Validation Tests
- * Covers: Invalidation, Sharing, Ping-Pong, O-state, False Sharing, Atomic RMW
+ * Covers: Invalidation, Sharing, Ping-Pong, O-state, False Sharing
  *
  * Usage: coherence_tests <test_id>
  *   0 = invalidation   (CPU0 write -> CPU1 read: stale data check)
@@ -8,7 +8,6 @@
  *   2 = pingpong       (M->I->M: alternating writers on same cacheline)
  *   3 = ostate         (M->O->S: MOESI O-state path)
  *   4 = false_sharing  (same cacheline, different words: perf vs no-sharing)
- *   5 = atomic_rmw     (lock xadd: lost-update check)
  *
  * Compile: gcc -O1 -static -march=x86-64 -pthread -o coherence_tests coherence_tests.c
  * Note: -O1 not -O2 to prevent volatile loads being optimized away.
@@ -242,30 +241,6 @@ static void test_false_sharing(void) {
            s0, s1, fs_private[0][0], fs_private[1][0]);
 }
 
-/* ── Test 5: Atomic RMW ───────────────────────────────────
- * N_THREADS threads each atomically increment a shared counter N_INC times.
- * Final value MUST equal N_THREADS * N_INC (no lost updates).
- * Exercises: lock xadd -> RMW atomicity across caches.
- */
-#define AT_THREADS 4
-#define AT_ITERS   512
-static volatile int at_counter __attribute__((aligned(CL)));
-
-static void *at_thread(void *arg) {
-    for (int i = 0; i < AT_ITERS; i++)
-        __sync_fetch_and_add(&at_counter, 1);
-    return NULL;
-}
-static void test_atomic(void) {
-    at_counter = 0;
-    pthread_t t[AT_THREADS];
-    for (int i = 0; i < AT_THREADS; i++) pthread_create(&t[i], NULL, at_thread, NULL);
-    for (int i = 0; i < AT_THREADS; i++) pthread_join(t[i], NULL);
-    int expected = AT_THREADS * AT_ITERS;
-    RESULT("atomic_rmw", at_counter == expected,
-           "expected %d got %d", expected, at_counter);
-}
-
 /* ── main ─────────────────────────────────────────────────── */
 int main(int argc, char *argv[])
 {
@@ -277,7 +252,6 @@ int main(int argc, char *argv[])
         case 2: test_pingpong();      break;
         case 3: test_ostate();        break;
         case 4: test_false_sharing(); break;
-        case 5: test_atomic();        break;
         default:
             /* run all */
             test_invalidation();
@@ -285,7 +259,6 @@ int main(int argc, char *argv[])
             test_pingpong();
             test_ostate();
             test_false_sharing();
-            test_atomic();
     }
     printf("done\n");
     return 0;

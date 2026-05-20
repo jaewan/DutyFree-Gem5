@@ -137,7 +137,7 @@ class DirCntrl(MOESI_AMD_4th_PF_Directory_Controller, CntrlBase):
         )
 
         self.ProbeFilterMemory = RubyCache(
-            size=MemorySize(getattr(options, "pf_size", "2MB")),
+            size=MemorySize(getattr(options, "pf_size", "2MiB")),
             assoc=int(getattr(options, "pf_assoc", 16)),
             tagAccessLatency=1,
             dataAccessLatency=1,
@@ -162,7 +162,7 @@ def define_options(parser):
     )
     parser.add_argument("--num-tbes", type=int, default=256)
     parser.add_argument("--l2-latency", type=int, default=50)
-    parser.add_argument("--pf-size", type=str, default="2MB", dest="pf_size")
+    parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")
 
 

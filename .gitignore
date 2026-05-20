@@ -121,3 +121,7 @@ doc/html/
 *.bak
 *.orig
 *.rej
+
+# 시뮬레이션 로그/결과
+logs/
+m5out*/

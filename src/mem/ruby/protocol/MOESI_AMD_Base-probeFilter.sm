@@ -632,6 +632,15 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         tbe.LastSender := entry.LastSender;
         tbe.L3Hit := true;
         tbe.MemData := true;
+        // Dirty data in L3 has not been written back to AbstractMemory.
+        // Send MEMORY_WB now so AbstractMemory stays coherent for future MEMORY_READs.
+        enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
+          out_msg.addr := address;
+          out_msg.Type := MemoryRequestType:MEMORY_WB;
+          out_msg.Sender := machineID;
+          out_msg.MessageSize := MessageSizeType:Writeback_Data;
+          out_msg.DataBlk := entry.DataBlk;
+        }
         L3CacheMemory.deallocate(address);
       } else {
         enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
@@ -1175,18 +1184,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   action(rmcd_removeSharerConditional, "rmcd", desc="remove sharer from probe Filter, conditional") {
-    peek(requestNetwork_in, CPURequestMsg) {
-      if (ProbeFilterMemory.isTagPresent(address)) {
-        CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-        if(machineIDToMachineType(in_msg.Requestor) == MachineType:CorePair) {//CorePair has inclusive L2
-          if (in_msg.Type == CoherenceRequestType:VicDirty) {
-            entry.isOnCPU := false;
-          } else if (in_msg.Type == CoherenceRequestType:VicClean) {
-            entry.isOnCPU := false;
-          }
-        }
-      }
-    }
+    // isOnCPU is intentionally not cleared here.
+    // A single VicClean/VicDirty from one CorePair does not mean all CorePairs
+    // have evicted the block; clearing the bit would cause subsequent probes
+    // to skip CorePairs that still hold valid copies, leading to coherence violations.
   }
 
   action(sf_setForwardReqTime, "sf", desc="...") {
@@ -1363,6 +1364,12 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     rv_removeVicDirtyIgnore;
     w_sendResponseWBAck;
     p_popRequestQueue;
+  }
+
+  // StaleWB: CorePair was probed while waiting for WBAck (I_C/S_C states).
+  // The dirty data already arrived via CPUPrbResp; just discard the notification.
+  transition({U, BL, BS_M, BM_M, B_M, BP, BS_PM, BM_PM, B_PM, BS_Pm, BM_Pm, B_Pm, B_P, B}, StaleWB) {
+    pr_popResponseQueue;
   }
 
   transition({B}, CoreUnblock, U) {
