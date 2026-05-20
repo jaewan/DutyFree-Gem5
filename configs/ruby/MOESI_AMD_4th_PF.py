@@ -104,22 +104,6 @@ class CPCntrl(MOESI_AMD_4th_PF_CorePair_Controller, CntrlBase):
             self.recycle_latency = options.recycle_latency
 
 
-class L3Cache(RubyCache):
-    assoc = 8
-    dataArrayBanks = 256
-    tagArrayBanks = 256
-
-    def create(self, options, ruby_system, system):
-        self.size = MemorySize(options.l3_size)
-        self.size.value /= options.num_dirs
-        self.dataArrayBanks /= options.num_dirs
-        self.tagArrayBanks /= options.num_dirs
-        self.dataAccessLatency = options.l3_data_latency
-        self.tagAccessLatency = options.l3_tag_latency
-        self.resourceStalls = options.no_resource_stalls
-        self.replacement_policy = TreePLRURP()
-
-
 class DirCntrl(MOESI_AMD_4th_PF_Directory_Controller, CntrlBase):
     def create(self, options, dir_ranges, ruby_system, system):
         self.version = self.versionCount()
@@ -127,13 +111,6 @@ class DirCntrl(MOESI_AMD_4th_PF_Directory_Controller, CntrlBase):
         self.addr_ranges = dir_ranges
         self.directory = RubyDirectoryMemory(
             block_size=ruby_system.block_size_bytes
-        )
-
-        self.L3CacheMemory = L3Cache()
-        self.L3CacheMemory.create(options, ruby_system, system)
-        self.l3_hit_latency = max(
-            self.L3CacheMemory.dataAccessLatency,
-            self.L3CacheMemory.tagAccessLatency,
         )
 
         self.ProbeFilterMemory = RubyCache(
@@ -154,8 +131,6 @@ class DirCntrl(MOESI_AMD_4th_PF_Directory_Controller, CntrlBase):
 
 def define_options(parser):
     parser.add_argument("--num-subcaches", type=int, default=4)
-    parser.add_argument("--l3-data-latency", type=int, default=20)
-    parser.add_argument("--l3-tag-latency", type=int, default=15)
     parser.add_argument("--cpu-to-dir-latency", type=int, default=15)
     parser.add_argument(
         "--no-resource-stalls", action="store_false", default=True
@@ -164,6 +139,15 @@ def define_options(parser):
     parser.add_argument("--l2-latency", type=int, default=50)
     parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")
+    # Override common cache defaults to match AMD Zen 4c
+    parser.set_defaults(
+        l1d_size="32KiB",
+        l1d_assoc=8,
+        l1i_size="64KiB",
+        l1i_assoc=8,
+        l2_size="16MiB",
+        l2_assoc=16,
+    )
 
 
 def create_system(
@@ -216,7 +200,6 @@ def create_system(
         dir_cntrl.responseToCore.out_port = ruby_system.network.in_port
 
         dir_cntrl.triggerQueue = MessageBuffer(ordered=True)
-        dir_cntrl.L3triggerQueue = MessageBuffer(ordered=True)
 
         dir_cntrl.requestToMemory = MessageBuffer()
         dir_cntrl.responseFromMemory = MessageBuffer()
@@ -300,16 +283,6 @@ def create_system(
                 line_size=options.cacheline_size,
                 assoc=options.l2_assoc,
                 cpus=[i * 2, i * 2 + 1],
-            )
-
-        for i in range(options.num_dirs):
-            FileSystemConfig.register_cache(
-                level=2,
-                idu_type="Unified",
-                size=options.l3_size,
-                line_size=options.cacheline_size,
-                assoc=options.l3_assoc,
-                cpus=[n for n in range(options.num_cpus)],
             )
 
     assert len(dma_devices) == 0

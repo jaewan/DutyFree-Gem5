@@ -9,7 +9,7 @@ echo "=== [1] victim + dummy  (2 CPUs, no aggressors) ==="
 build_pf/gem5.opt --outdir=logs/victim_aggressor/alone_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
-    --l1d_size=32KiB --l1i_size=32KiB --l2_size=512KiB \
+    --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/dirtax/victim;testcase/dirtax/dummy" \
     -o ";" \
     2>&1 | tee logs/victim_aggressor/alone.log | grep -E "victim|aggressor|Exiting|FAIL|panic" || true
@@ -30,7 +30,7 @@ echo "=== [2] victim + 3 aggressors  (8 CPUs) ==="
 build_pf/gem5.opt --outdir=logs/victim_aggressor/with_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
-    --l1d_size=32KiB --l1i_size=32KiB --l2_size=512KiB \
+    --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/dirtax/victim;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy" \
     -o ";;;;;;;" \
     2>&1 | tee logs/victim_aggressor/with.log | grep -E "victim|aggressor|Exiting|FAIL|panic" || true
