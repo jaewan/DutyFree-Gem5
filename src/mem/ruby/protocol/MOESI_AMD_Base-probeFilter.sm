@@ -562,9 +562,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.ForwardRequestTime := tbe.ForwardRequestTime;
         out_msg.ProbeRequestStartTime := tbe.ProbeRequestStartTime;
         out_msg.OriginalResponder := tbe.LastSender;
-        if(tbe.atomicData){
-          out_msg.WTRequestor := tbe.WTRequestor;
-        }
+        // WTRequestor not in ResponseMsg; atomic unblock handled via triggerQueue
         out_msg.L3Hit := tbe.L3Hit;
         DPRINTF(RubySlicc, "%s\n", out_msg);
       }
@@ -600,7 +598,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.addr := address;
         out_msg.Type := CoherenceResponseType:NBSysWBAck;
         out_msg.Destination.add(in_msg.Requestor);
-        out_msg.WTRequestor := in_msg.WTRequestor;
         out_msg.Sender := machineID;
         out_msg.MessageSize := MessageSizeType:Writeback_Control;
         out_msg.InitialRequestTime := in_msg.InitialRequestTime;
@@ -635,6 +632,15 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         tbe.LastSender := entry.LastSender;
         tbe.L3Hit := true;
         tbe.MemData := true;
+        // Dirty data in L3 has not been written back to AbstractMemory.
+        // Send MEMORY_WB now so AbstractMemory stays coherent for future MEMORY_READs.
+        enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
+          out_msg.addr := address;
+          out_msg.Type := MemoryRequestType:MEMORY_WB;
+          out_msg.Sender := machineID;
+          out_msg.MessageSize := MessageSizeType:Writeback_Data;
+          out_msg.DataBlk := entry.DataBlk;
+        }
         L3CacheMemory.deallocate(address);
       } else {
         enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
@@ -837,7 +843,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         tbe.writeMask.clear();
         tbe.writeMask.orMask(in_msg.writeMask);
         tbe.wtData := true;
-        tbe.WTRequestor := in_msg.WTRequestor;
         tbe.LastSender := in_msg.Requestor;
       }
       if (in_msg.Type == CoherenceRequestType:Atomic ||
@@ -847,12 +852,11 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         tbe.writeMask.orMask(in_msg.writeMask);
         tbe.atomicData := true;
         if (in_msg.Type == CoherenceRequestType:AtomicReturn) {
-          tbe.atomicDataReturn = true;
+          tbe.atomicDataReturn := true;
         } else {
           assert(in_msg.Type == CoherenceRequestType:AtomicNoReturn);
-          tbe.atomicDataNoReturn = true;
+          tbe.atomicDataNoReturn := true;
         }
-        tbe.WTRequestor := in_msg.WTRequestor;
         tbe.LastSender := in_msg.Requestor;
       }
       tbe.DataBlk := getDirectoryEntry(address).DataBlk; // Data only for WBs
@@ -892,7 +896,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
                                 tbe.writeMask, true);
       }
       getDirectoryEntry(address).DataBlk := tbe.DataBlk;
-    } else if (tbe.Dirty == false) {
+    } else if (tbe.Dirty) {
+      // Dirty data returned by back-probe (PF_Repl): write back to memory.
+      getDirectoryEntry(address).DataBlk := tbe.DataBlk;
+    } else {
       getDirectoryEntry(address).DataBlk := tbe.DataBlk;
     }
   }
@@ -900,9 +907,11 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   action(mt_writeMemDataToTBE, "mt", desc="write Mem data to TBE") {
     peek(memQueue_in, MemoryMsg) {
       if (tbe.wtData == true) {
-        // DO Nothing (already have the directory data)
+        DataBlock tmpBlk := in_msg.DataBlk;
+        tmpBlk.copyPartial(tbe.DataBlk, tbe.writeMask);
+        tbe.DataBlk := tmpBlk;
       } else if (tbe.Dirty == false) {
-        tbe.DataBlk := getDirectoryEntry(address).DataBlk;
+        tbe.DataBlk := in_msg.DataBlk;
       }
       tbe.MemData := true;
     }
@@ -919,7 +928,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
           tbe.DataBlk := tmp;
         } else if (tbe.Dirty) {
           if(tbe.atomicData == false && tbe.wtData == false) {
-            assert(atomicDataReturn == false && atomicDataNoReturn);
+            assert(tbe.atomicDataReturn == false && tbe.atomicDataNoReturn);
             DPRINTF(RubySlicc, "Got double data for %s from %s\n", address, in_msg.Sender);
             assert(tbe.DataBlk == in_msg.DataBlk);  // in case of double data
           }
@@ -997,6 +1006,52 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     }
   }
 
+  // VicDirty arrives directly from CorePair (no L3cache.sm intermediary).
+  // Read dirty data from the request message itself.
+  action(dReq_writeDataToMemoryFromReq, "dReq",
+         desc="Write VicDirty data from request to directory entry") {
+    peek(requestNetwork_in, CPURequestMsg) {
+      getDirectoryEntry(address).DataBlk := in_msg.DataBlk;
+      if (tbe.Dirty == false) {
+        tbe.DataBlk := in_msg.DataBlk;
+      }
+      DPRINTF(RubySlicc, "VicDirty: writing data %s to address %s\n",
+              in_msg.DataBlk, in_msg.addr);
+    }
+  }
+
+  action(alReq_allocateL3BlockFromReq, "alReq",
+         desc="Allocate L3 block from VicDirty request data") {
+    peek(requestNetwork_in, CPURequestMsg) {
+      if (L3CacheMemory.isTagPresent(address)) {
+        CacheEntry entry := static_cast(CacheEntry, "pointer", L3CacheMemory.lookup(address));
+        APPEND_TRANSITION_COMMENT(" alReq wrote data to L3 (hit) ");
+        entry.DataBlk := in_msg.DataBlk;
+        entry.LastSender := in_msg.Requestor;
+      } else {
+        if (L3CacheMemory.cacheAvail(address) == false) {
+          Addr victim := L3CacheMemory.cacheProbe(address);
+          CacheEntry victim_entry := static_cast(CacheEntry, "pointer",
+                                                 L3CacheMemory.lookup(victim));
+          enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
+            out_msg.addr := victim;
+            out_msg.Type := MemoryRequestType:MEMORY_WB;
+            out_msg.Sender := machineID;
+            out_msg.MessageSize := MessageSizeType:Writeback_Data;
+            out_msg.DataBlk := victim_entry.DataBlk;
+          }
+          L3CacheMemory.deallocate(victim);
+        }
+        assert(L3CacheMemory.cacheAvail(address));
+        CacheEntry entry := static_cast(CacheEntry, "pointer",
+                                        L3CacheMemory.allocate(address, new CacheEntry));
+        APPEND_TRANSITION_COMMENT(" alReq wrote data to L3 ");
+        entry.DataBlk := in_msg.DataBlk;
+        entry.LastSender := in_msg.Requestor;
+      }
+    }
+  }
+
   action(alwt_allocateL3BlockOnWT, "alwt", desc="allocate the L3 block on WT") {
     if ((tbe.wtData || tbe.atomicData) && useL3OnWT) {
       if (L3CacheMemory.isTagPresent(address)) {
@@ -1021,6 +1076,37 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         assert(L3CacheMemory.cacheAvail(address));
         CacheEntry entry := static_cast(CacheEntry, "pointer", L3CacheMemory.allocate(address, new CacheEntry));
         APPEND_TRANSITION_COMMENT(" al wrote data to L3 ");
+        entry.DataBlk := tbe.DataBlk;
+        entry.LastSender := tbe.LastSender;
+      }
+    }
+  }
+
+  // Used in B_P→U (PF_Repl) to write dirty back-probe data into L3.
+  action(alDirty_allocateL3BlockFromTBE, "alDirty",
+         desc="Allocate L3 block from TBE dirty data (PF_Repl writeback)") {
+    if (tbe.Dirty) {
+      if (L3CacheMemory.isTagPresent(address)) {
+        CacheEntry entry := static_cast(CacheEntry, "pointer", L3CacheMemory.lookup(address));
+        entry.DataBlk := tbe.DataBlk;
+        entry.LastSender := tbe.LastSender;
+      } else {
+        if (L3CacheMemory.cacheAvail(address) == false) {
+          Addr victim := L3CacheMemory.cacheProbe(address);
+          CacheEntry victim_entry := static_cast(CacheEntry, "pointer",
+                                                 L3CacheMemory.lookup(victim));
+          enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
+            out_msg.addr := victim;
+            out_msg.Type := MemoryRequestType:MEMORY_WB;
+            out_msg.Sender := machineID;
+            out_msg.MessageSize := MessageSizeType:Writeback_Data;
+            out_msg.DataBlk := victim_entry.DataBlk;
+          }
+          L3CacheMemory.deallocate(victim);
+        }
+        assert(L3CacheMemory.cacheAvail(address));
+        CacheEntry entry := static_cast(CacheEntry, "pointer",
+                                        L3CacheMemory.allocate(address, new CacheEntry));
         entry.DataBlk := tbe.DataBlk;
         entry.LastSender := tbe.LastSender;
       }
@@ -1098,18 +1184,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   action(rmcd_removeSharerConditional, "rmcd", desc="remove sharer from probe Filter, conditional") {
-    peek(requestNetwork_in, CPURequestMsg) {
-      if (ProbeFilterMemory.isTagPresent(address)) {
-        CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-        if(machineIDToMachineType(in_msg.Requestor) == MachineType:CorePair) {//CorePair has inclusive L2
-          if (in_msg.Type == CoherenceRequestType:VicDirty) {
-            entry.isOnCPU := false;
-          } else if (in_msg.Type == CoherenceRequestType:VicClean) {
-            entry.isOnCPU := false;
-          }
-        }
-      }
-    }
+    // isOnCPU is intentionally not cleared here.
+    // A single VicClean/VicDirty from one CorePair does not mean all CorePairs
+    // have evicted the block; clearing the bit would cause subsequent probes
+    // to skip CorePairs that still hold valid copies, leading to coherence violations.
   }
 
   action(sf_setForwardReqTime, "sf", desc="...") {
@@ -1247,37 +1325,27 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     p_popRequestQueue;
   }
 
-  transition(U, VicDirty, BL) {L3TagArrayRead} {
+  // VicDirty: dirty data is carried in the request message itself.
+  // Complete atomically without BL state (no L3cache.sm intermediary).
+  transition(U, VicDirty, U) {L3TagArrayRead, L3DataArrayWrite} {
     t_allocateTBE;
     w_sendResponseWBAck;
+    dReq_writeDataToMemoryFromReq;
+    alReq_allocateL3BlockFromReq;
     rmcd_removeSharerConditional;
-    p_popRequestQueue;
-  }
-
-  transition(U, VicClean, BL) {L3TagArrayRead} {
-    t_allocateTBE;
-    w_sendResponseWBAck;
-    rmcd_removeSharerConditional;
-    p_popRequestQueue;
-  }
-
-  transition(BL, {VicDirty, VicClean}) {
-    zz_recycleRequestQueue;
-  }
-
-  transition(BL, CPUData, U) {L3TagArrayWrite, L3DataArrayWrite} {
-    d_writeDataToMemory;
-    al_allocateL3Block;
     wa_wakeUpDependents;
     dt_deallocateTBE;
-    //l_queueMemWBReq;  // why need an ack?  esp. with DRAMSim, just put it in queue no ack needed
-    pr_popResponseQueue;
+    p_popRequestQueue;
   }
 
-  transition(BL, StaleWB, U) {L3TagArrayWrite} {
+  // VicClean: block is clean, memory already has a valid copy. No data write needed.
+  transition(U, VicClean, U) {L3TagArrayRead} {
+    t_allocateTBE;
+    w_sendResponseWBAck;
+    rmcd_removeSharerConditional;
+    wa_wakeUpDependents;
     dt_deallocateTBE;
-    wa_wakeUpAllDependents;
-    pr_popResponseQueue;
+    p_popRequestQueue;
   }
 
   transition({B, BS_M, BM_M, B_M, BP, BS_PM, BM_PM, B_PM, BS_Pm, BM_Pm, B_Pm, B_P}, {VicDirty, VicClean}) {
@@ -1296,6 +1364,12 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     rv_removeVicDirtyIgnore;
     w_sendResponseWBAck;
     p_popRequestQueue;
+  }
+
+  // StaleWB: CorePair was probed while waiting for WBAck (I_C/S_C states).
+  // The dirty data already arrived via CPUPrbResp; just discard the notification.
+  transition({U, BL, BS_M, BM_M, B_M, BP, BS_PM, BM_PM, B_PM, BS_Pm, BM_Pm, B_Pm, B_P, B}, StaleWB) {
+    pr_popResponseQueue;
   }
 
   transition({B}, CoreUnblock, U) {
@@ -1435,8 +1509,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     pt_popTriggerQueue;
   }
 
-  transition(B_P, ProbeAcksComplete, U) {
+  transition(B_P, ProbeAcksComplete, U) {L3TagArrayWrite, L3DataArrayWrite} {
     wd_writeBackData;
+    alDirty_allocateL3BlockFromTBE;
     alwt_allocateL3BlockOnWT;
     we_wakeUpEvictionDependents;
     dpf_deallocateProbeFilter;

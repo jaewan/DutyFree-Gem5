@@ -55,5 +55,8 @@ config RUBY_PROTOCOL_MOESI_hammer
 config RUBY_PROTOCOL_Garnet_standalone
     bool "Garnet standalone"
     default n
+config RUBY_PROTOCOL_MOESI_AMD_4th_PF
+    bool "MOESI AMD 4th ProbeFilter"
+    default n
 
 rsource "chi/Kconfig"

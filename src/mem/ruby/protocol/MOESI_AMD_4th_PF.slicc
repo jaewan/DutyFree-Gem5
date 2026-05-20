@@ -1,0 +1,4 @@
+protocol "MOESI_AMD_4th_PF";
+include "MOESI_AMD_Base-msg.sm";
+include "MOESI_AMD_Base-CorePair.sm";
+include "MOESI_AMD_Base-probeFilter.sm";
