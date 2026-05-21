@@ -34,7 +34,7 @@
  * Differences with AMD base protocol
  * -- Uses a probe filter memory to track sharers.
  * -- The probe filter can be inclusive or non-inclusive
- * -- Only two sharers tracked. Sharers are a) GPU or/and  b) CPU
+ * -- Only CPU (CorePair) sharers tracked.
  * -- If sharer information available, the sharer is probed
  * -- If sharer information not available, probes are broadcasted
  */
@@ -43,9 +43,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 : DirectoryMemory * directory;
   CacheMemory * ProbeFilterMemory;
   Cycles response_latency := 5;
-  bool noTCCdir := "False";
-  bool CAB_TCC := "False";
-  int TCC_select_num_bits:=1;
   bool inclusiveDir := "True";
   Cycles to_memory_controller_latency := 1;
 
@@ -139,7 +136,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   structure(CacheEntry, desc="...", interface="AbstractCacheEntry") {
     ProbeFilterState pfState,   desc="ProbeFilter state",default="Directory_ProbeFilterState_NT";
     bool isOnCPU,               desc="Block valid in the CPU complex",default="false";
-    bool isOnGPU,               desc="Block valid in the GPU complex",default="false";
   }
 
   structure(TBE, desc="...") {
@@ -173,8 +169,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   TBETable TBEs, template="<Directory_TBE>", constructor="m_number_of_TBEs";
-
-  int TCC_select_low_bit, default="m_ruby_system->getBlockSizeBits()";
 
   Tick clockEdge();
   Tick cyclesToTicks(Cycles c);
@@ -286,17 +280,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         return false;
     }
     return true;
-  }
-
-  bool isGPUSharer(Addr address) {
-    assert(ProbeFilterMemory.isTagPresent(address));
-    CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-    if (entry.pfState == ProbeFilterState:NT) {
-       return true;
-    } else if (entry.isOnGPU){
-       return true;
-    }
-    return false;
   }
 
   bool isCPUSharer(Addr address) {
@@ -602,21 +585,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
           out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
         }
 
-        // add relevant TCC node to list. This replaces all TCPs and SQCs
-        if(isGPUSharer(address)) {
-          if ((in_msg.Type == CoherenceRequestType:WriteThrough ||
-               in_msg.Type == CoherenceRequestType:Atomic ||
-               in_msg.Type == CoherenceRequestType:AtomicReturn ||
-               in_msg.Type == CoherenceRequestType:AtomicNoReturn) &&
-               in_msg.NoWriteConflict) {
-          // Don't Include TCCs unless there was write-CAB conflict in the TCC
-          } else if(noTCCdir) {
-            out_msg.Destination.add(mapAddressToRange(address,MachineType:TCC,
-                                    TCC_select_low_bit, TCC_select_num_bits));
-          } else {
-                out_msg.Destination.add(mapAddressToMachine(address, MachineType:TCCdir));
-          }
-        }
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
         if (tbe.NumPendingAcks == 0) {
@@ -643,19 +611,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         // won't be realistic for multisocket
         out_msg.Destination.broadcast(MachineType:CorePair);
       }
-      // add relevant TCC node to the list. This replaces all TCPs and SQCs
-      if(isGPUSharer(address)) {
-        if (noTCCdir) {
-          //Don't need to notify TCC about reads
-        } else {
-          out_msg.Destination.add(mapAddressToMachine(address, MachineType:TCCdir));
-          tbe.NumPendingAcks := tbe.NumPendingAcks + 1;
-        }
-        if (noTCCdir && CAB_TCC) {
-          out_msg.Destination.add(mapAddressToRange(address,MachineType:TCC,
-                                  TCC_select_low_bit, TCC_select_num_bits));
-        }
-      }
       tbe.NumPendingAcks := out_msg.Destination.count();
       if (tbe.NumPendingAcks == 0) {
         enqueue(triggerQueue_out, TriggerMsg, 1) {
@@ -680,19 +635,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.MessageSize := MessageSizeType:Control;
         if(isCPUSharer(address)) {
           out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
-        }
-        // add relevant TCC node to the list. This replaces all TCPs and SQCs
-        if(isGPUSharer(address)) {
-          if (noTCCdir) {
-            //Don't need to notify TCC about reads
-          } else {
-            out_msg.Destination.add(mapAddressToMachine(address, MachineType:TCCdir));
-            tbe.NumPendingAcks := tbe.NumPendingAcks + 1;
-          }
-          if (noTCCdir && CAB_TCC) {
-            out_msg.Destination.add(mapAddressToRange(address,MachineType:TCC,
-                                    TCC_select_low_bit, TCC_select_num_bits));
-          }
         }
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
@@ -719,16 +661,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.MessageSize := MessageSizeType:Control;
         if(isCPUSharer(address)) {
           out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
-        }
-
-        // add relevant TCC node to the list. This replaces all TCPs and SQCs
-        if(isGPUSharer(address)) {
-          if (noTCCdir) {
-              out_msg.Destination.add(mapAddressToRange(address,MachineType:TCC,
-                                TCC_select_low_bit, TCC_select_num_bits));
-          } else {
-              out_msg.Destination.add(mapAddressToMachine(address, MachineType:TCCdir));
-          }
         }
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
@@ -943,7 +875,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
           entry.pfState := ProbeFilterState:T;
         }
         entry.isOnCPU := false;
-        entry.isOnGPU := false;
     }
   }
 
@@ -973,26 +904,20 @@ machine(MachineType:Directory, "AMD Baseline protocol")
       if (in_msg.Type == CoherenceRequestType:WriteThrough) {
         entry.pfState := ProbeFilterState:T;
         entry.isOnCPU := false;
-        entry.isOnGPU := false;
       } else if (in_msg.Type == CoherenceRequestType:Atomic ||
                  in_msg.Type == CoherenceRequestType:AtomicReturn ||
                  in_msg.Type == CoherenceRequestType:AtomicNoReturn) {
         entry.pfState := ProbeFilterState:T;
         entry.isOnCPU := false;
-        entry.isOnGPU := false;
       } else if (in_msg.Type == CoherenceRequestType:RdBlkM) {
         entry.pfState := ProbeFilterState:T;
         entry.isOnCPU := false;
-        entry.isOnGPU := false;
       } else if (in_msg.Type == CoherenceRequestType:CtoD) {
         entry.pfState := ProbeFilterState:T;
         entry.isOnCPU := false;
-        entry.isOnGPU := false;
       }
       if(machineIDToMachineType(in_msg.Requestor) == MachineType:CorePair) {
         entry.isOnCPU := true;
-      } else {
-        entry.isOnGPU := true;
       }
     }
   }

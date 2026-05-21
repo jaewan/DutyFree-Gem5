@@ -1,33 +1,61 @@
 #!/usr/bin/env bash
 # probe_test.sh
-# Run 8 private latency_bench instances (one per CPU) and report probe counts.
-# Use this to compare broadcast (before Step 5) vs targeted (after Step 5).
+# Section 1: Private  - 4 independent latency_bench processes (one per CPU)
+# Section 2: Shared   - 1 shared_bench with 4 threads (all CorePairs access same array)
+#
+# Compare broadcast (Step 4) vs targeted (Step 5):
+#   Private:  broadcast ~3.0  → targeted ~1.0  (big improvement)
+#   Shared:   broadcast ~3.0  → targeted ~3.0  (no improvement, data genuinely shared)
 
-set -e
+mkdir -p logs/probe
 
-echo "=== Running probe test (8 private workloads, one per CPU) ==="
-build_pf/gem5.opt configs/deprecated/example/se.py \
-  --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
+echo "=== Launching probe tests in parallel ==="
+
+# ── Section 1: Private ──────────────────────────────────────────────────────
+build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/probe/private_m5out \
+  configs/deprecated/example/se.py \
+  --ruby --cpu-type=TimingSimpleCPU --num-cpus=4 \
   --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-  -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
-  -o "524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144;524288 324011 4096 r 262144" \
-  2>&1 | grep "Exiting @ tick"
+  -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
+  -o "524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8" \
+  > logs/probe/private.log 2>&1 &
+echo "  started: private  (log: logs/probe/private.log)"
+
+# ── Section 2: Shared ───────────────────────────────────────────────────────
+build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/probe/shared_m5out \
+  configs/deprecated/example/se.py \
+  --ruby --cpu-type=TimingSimpleCPU --num-cpus=4 \
+  --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
+  -c testcase/latency/shared_bench \
+  -o "262144 324011 4096 4" \
+  > logs/probe/shared.log 2>&1 &
+echo "  started: shared  (log: logs/probe/shared.log)"
 
 echo ""
-echo "=== Probe Counts ==="
-DIR=$(grep "dir_cntrl0.probeToCore.m_msg_count" m5out/stats.txt | awk '{print $2}')
-CP0=$(grep "cp_cntrl0.probeToCore.m_msg_count" m5out/stats.txt | awk '{print $2}')
-CP1=$(grep "cp_cntrl1.probeToCore.m_msg_count" m5out/stats.txt | awk '{print $2}')
-CP2=$(grep "cp_cntrl2.probeToCore.m_msg_count" m5out/stats.txt | awk '{print $2}')
-CP3=$(grep "cp_cntrl3.probeToCore.m_msg_count" m5out/stats.txt | awk '{print $2}')
-TOTAL=$((CP0 + CP1 + CP2 + CP3))
+echo "Waiting for both to finish..."
+wait
 
-echo "Dir probes sent:      $DIR"
-echo "CorePair0 received:   $CP0"
-echo "CorePair1 received:   $CP1"
-echo "CorePair2 received:   $CP2"
-echo "CorePair3 received:   $CP3"
-echo "Total received:       $TOTAL"
-echo "Avg probes per send:  $(echo "scale=2; $TOTAL / $DIR" | bc)"
 echo ""
-echo "# Step 5 후 'Avg probes per send' 이 1.0에 가까워져야 함 (broadcast=~4.0)"
+echo "=== [Private] 4 independent workloads (one per CPU) ==="
+grep "Exiting @ tick" logs/probe/private.log || true
+echo "--- Private Probe Counts ---"
+grep "dir_cntrl0.probeToCore.m_msg_count" logs/probe/private_m5out/stats.txt | awk '{print "Dir probes sent:     ", $2}'
+grep "cp_cntrl0.probeToCore.m_msg_count" logs/probe/private_m5out/stats.txt | awk '{print "CorePair0 received:  ", $2}'
+grep "cp_cntrl1.probeToCore.m_msg_count" logs/probe/private_m5out/stats.txt | awk '{print "CorePair1 received:  ", $2}'
+grep "cp_cntrl2.probeToCore.m_msg_count" logs/probe/private_m5out/stats.txt | awk '{print "CorePair2 received:  ", $2}'
+grep "cp_cntrl3.probeToCore.m_msg_count" logs/probe/private_m5out/stats.txt | awk '{print "CorePair3 received:  ", $2}'
+
+echo ""
+echo "=== [Shared] 4 threads sharing the same array ==="
+grep "Exiting @ tick" logs/probe/shared.log || true
+echo "--- Shared Probe Counts ---"
+grep "dir_cntrl0.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "Dir probes sent:     ", $2}'
+grep "cp_cntrl0.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "CorePair0 received:  ", $2}'
+grep "cp_cntrl1.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "CorePair1 received:  ", $2}'
+grep "cp_cntrl2.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "CorePair2 received:  ", $2}'
+grep "cp_cntrl3.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "CorePair3 received:  ", $2}'
+
+echo ""
+echo "# Step 5 후 예상:"
+echo "#   Private: Avg ~1.0  (targeted to owning CorePair only)"
+echo "#   Shared:  Avg ~3.0  (all CorePairs share the data, broadcast = targeted)"

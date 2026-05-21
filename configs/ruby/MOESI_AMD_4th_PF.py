@@ -181,7 +181,7 @@ def create_system(
             )
             dir_ranges.append(addr_range)
 
-        dir_cntrl = DirCntrl(TCC_select_num_bits=0)
+        dir_cntrl = DirCntrl()
         dir_cntrl.create(options, dir_ranges, ruby_system, system)
 
         dir_cntrl.requestFromCores = MessageBuffer(ordered=True)
