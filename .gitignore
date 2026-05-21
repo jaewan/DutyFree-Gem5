@@ -11,6 +11,9 @@ cscope.out
 .*.swp
 .*.swo
 m5out
+m5out_*/
+build_*/
+logs/
 /src/doxygen/html
 /docs/_build
 /ext/dramsim2/DRAMSim2
