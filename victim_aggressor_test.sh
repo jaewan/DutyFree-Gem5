@@ -6,7 +6,7 @@ mkdir -p logs/victim_aggressor
 echo ""
 echo "=== [1] victim + dummy  (2 CPUs, no aggressors) ==="
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/victim_aggressor/alone_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/victim_aggressor/alone_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -27,7 +27,7 @@ grep -E "^sim_seconds\s"                    logs/victim_aggressor/alone_m5out/st
 echo ""
 echo "=== [2] victim + 3 aggressors  (8 CPUs) ==="
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/victim_aggressor/with_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/victim_aggressor/with_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \

@@ -12,7 +12,7 @@ mkdir -p logs/latency
 echo "=== Launching latency tests ==="
 
 # ── L1 read ───────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_read_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -21,7 +21,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_read_1t_m5out \
     > logs/latency/l1_read_1t.log 2>&1 &
 echo "  started: l1_read_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_read_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -31,7 +31,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_read_8t_m5out \
 echo "  started: l1_read_8t"
 
 # ── L1 write ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_write_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -40,7 +40,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_write_1t_m5out \
     > logs/latency/l1_write_1t.log 2>&1 &
 echo "  started: l1_write_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_write_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -50,7 +50,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l1_write_8t_m5out \
 echo "  started: l1_write_8t"
 
 # ── L2 read ───────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_read_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -59,7 +59,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_read_1t_m5out \
     > logs/latency/l2_read_1t.log 2>&1 &
 echo "  started: l2_read_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_read_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -69,7 +69,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_read_8t_m5out \
 echo "  started: l2_read_8t"
 
 # ── L2 write ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_write_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -78,7 +78,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_write_1t_m5out \
     > logs/latency/l2_write_1t.log 2>&1 &
 echo "  started: l2_write_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_write_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -88,7 +88,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/l2_write_8t_m5out \
 echo "  started: l2_write_8t"
 
 # ── MEM read ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_read_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -97,7 +97,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_read_1t_m5out \
     > logs/latency/mem_read_1t.log 2>&1 &
 echo "  started: mem_read_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_read_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -107,7 +107,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_read_8t_m5out \
 echo "  started: mem_read_8t"
 
 # ── MEM write ─────────────────────────────────────────────────────────────
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_write_1t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
@@ -116,7 +116,7 @@ build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_write_1t_m5out \
     > logs/latency/mem_write_1t.log 2>&1 &
 echo "  started: mem_write_1t"
 
-build_amd_zen4_PF_broadcast/gem5.opt --outdir=logs/latency/mem_write_8t_m5out \
+build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
