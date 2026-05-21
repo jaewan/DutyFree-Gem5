@@ -85,6 +85,11 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     RdBlkS,             desc="...";
     RdBlkM,             desc="...";
     RdBlk,              desc="...";
+    // Approach A: DirtyOwner present → skip memory read, go directly to Pm state
+    // (workaround: reuses Pm "memory already done" states without issuing mem read)
+    RdBlkS_DO,          desc="RdBlkS with DirtyOwner present, skip mem read";
+    RdBlkM_DO,          desc="RdBlkM with DirtyOwner present, skip mem read";
+    RdBlk_DO,           desc="RdBlk with DirtyOwner present, skip mem read";
     CtoD,               desc="...";
     WriteThrough,       desc="WriteThrough Message";
     Atomic,             desc="Atomic Message";
@@ -377,11 +382,23 @@ machine(MachineType:Directory, "AMD Baseline protocol")
             entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(victim));
             trigger(Event:PF_Repl, victim, entry, tbe);
         } else if (in_msg.Type == CoherenceRequestType:RdBlk) {
-          trigger(Event:RdBlk, in_msg.addr, entry, tbe);
+          if (is_valid(entry) && machineIDToMachineType(entry.DirtyOwner) == MachineType:CorePair) {
+            trigger(Event:RdBlk_DO, in_msg.addr, entry, tbe);
+          } else {
+            trigger(Event:RdBlk, in_msg.addr, entry, tbe);
+          }
         } else if (in_msg.Type == CoherenceRequestType:RdBlkS) {
-          trigger(Event:RdBlkS, in_msg.addr, entry, tbe);
+          if (is_valid(entry) && machineIDToMachineType(entry.DirtyOwner) == MachineType:CorePair) {
+            trigger(Event:RdBlkS_DO, in_msg.addr, entry, tbe);
+          } else {
+            trigger(Event:RdBlkS, in_msg.addr, entry, tbe);
+          }
         } else if (in_msg.Type == CoherenceRequestType:RdBlkM) {
-          trigger(Event:RdBlkM, in_msg.addr, entry, tbe);
+          if (is_valid(entry) && machineIDToMachineType(entry.DirtyOwner) == MachineType:CorePair) {
+            trigger(Event:RdBlkM_DO, in_msg.addr, entry, tbe);
+          } else {
+            trigger(Event:RdBlkM, in_msg.addr, entry, tbe);
+          }
         } else if (in_msg.Type == CoherenceRequestType:WriteThrough) {
           trigger(Event:WriteThrough, in_msg.addr, entry, tbe);
         } else if (in_msg.Type == CoherenceRequestType:Atomic ||
@@ -977,6 +994,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     st_stallAndWaitRequest;
   }
 
+  transition({BS_M, BM_M, B_M, BP, BS_PM, BM_PM, B_PM, BS_Pm, BM_Pm, B_Pm, B_P, B}, {RdBlkS_DO, RdBlkM_DO, RdBlk_DO}) {
+    st_stallAndWaitRequest;
+  }
+
   // It may be possible to save multiple invalidations here!
   transition({BS_M, BM_M, B_M, BP, BS_PM, BM_PM, B_PM, BS_Pm, BM_Pm, B_Pm, B_P, B}, {Atomic, WriteThrough}) {
     st_stallAndWaitRequest;
@@ -1047,6 +1068,36 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     t_allocateTBE;
     apf_allocateProbeFilterEntry;
     ic_probeInvCore;
+    sm_setMRU;
+    upf_updateProbeFilter;
+    p_popRequestQueue;
+  }
+
+  // Approach A: DirtyOwner present → skip l_queueMemRdReq, go to Pm states
+  // ("memory already done" states reused here since dirty data comes from CPUPrbResp;
+  //  lqDirty_queueMemWBFromTBE in the Pm→B transition writes dirty data back to memory)
+  transition(U, RdBlkS_DO, BS_Pm) {PFTagArrayRead, PFTagArrayWrite} {
+    t_allocateTBE;
+    apf_allocateProbeFilterEntry;
+    sc_probeShrCoreData;
+    sm_setMRU;
+    upf_updateProbeFilter;
+    p_popRequestQueue;
+  }
+
+  transition(U, RdBlkM_DO, BM_Pm) {PFTagArrayRead, PFTagArrayWrite} {
+    t_allocateTBE;
+    apf_allocateProbeFilterEntry;
+    dc_probeInvCoreData;
+    sm_setMRU;
+    upf_updateProbeFilter;
+    p_popRequestQueue;
+  }
+
+  transition(U, RdBlk_DO, B_Pm) {PFTagArrayRead, PFTagArrayWrite} {
+    t_allocateTBE;
+    apf_allocateProbeFilterEntry;
+    sc_probeShrCoreData;
     sm_setMRU;
     upf_updateProbeFilter;
     p_popRequestQueue;
