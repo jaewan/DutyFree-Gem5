@@ -122,7 +122,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   enumeration(ProbeFilterState, desc="") {
     T,  desc="Tracked";
-    NT, desc="Not tracked";
+    // NT removed: inclusiveDir=True always; entry presence implies tracked
     B, desc="Blocked, This entry is being replaced";
   }
 
@@ -134,8 +134,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   structure(CacheEntry, desc="...", interface="AbstractCacheEntry") {
-    ProbeFilterState pfState,   desc="ProbeFilter state",default="Directory_ProbeFilterState_NT";
-    bool isOnCPU,               desc="Block valid in the CPU complex",default="false";
+    ProbeFilterState pfState,   desc="ProbeFilter state",default="Directory_ProbeFilterState_T";
+    NetDest Sharers,            desc="CCX(CorePair) set holding this line";
+    MachineID DirtyOwner,       desc="CCX in M or O state; MachineType:NUM if none";
   }
 
   structure(TBE, desc="...") {
@@ -282,15 +283,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     return true;
   }
 
-  bool isCPUSharer(Addr address) {
+  bool isCCXSharer(Addr address) {
     assert(ProbeFilterMemory.isTagPresent(address));
     CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-    if (entry.pfState == ProbeFilterState:NT) {
-       return true;
-    } else if (entry.isOnCPU){
-       return true;
-    }
-    return false;
+    return entry.Sharers.count() > 0;
   }
 
 
@@ -581,10 +577,10 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.Type := ProbeRequestType:PrbInv;
         out_msg.ReturnData := true;
         out_msg.MessageSize := MessageSizeType:Control;
-        if(isCPUSharer(address)) {
-          out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
+        CacheEntry pf_entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+        if (isCCXSharer(address)) {
+          out_msg.Destination := pf_entry.Sharers;
         }
-
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
         if (tbe.NumPendingAcks == 0) {
@@ -593,9 +589,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
             out_msg.Type := TriggerType:AcksComplete;
           }
         }
-        DPRINTF(RubySlicc, "%s\n", out_msg);
-        APPEND_TRANSITION_COMMENT(" dc: Acks remaining: ");
-        APPEND_TRANSITION_COMMENT(tbe.NumPendingAcks);
         tbe.ProbeRequestStartTime := curCycle();
       }
     }
@@ -607,9 +600,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
       out_msg.Type := ProbeRequestType:PrbInv;
       out_msg.ReturnData := true;
       out_msg.MessageSize := MessageSizeType:Control;
-      if(isCPUSharer(address)) {
-        // won't be realistic for multisocket
-        out_msg.Destination.broadcast(MachineType:CorePair);
+      CacheEntry pf_entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+      if (isCCXSharer(address)) {
+        out_msg.Destination := pf_entry.Sharers;
       }
       tbe.NumPendingAcks := out_msg.Destination.count();
       if (tbe.NumPendingAcks == 0) {
@@ -633,8 +626,16 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.Type := ProbeRequestType:PrbDowngrade;
         out_msg.ReturnData := true;
         out_msg.MessageSize := MessageSizeType:Control;
-        if(isCPUSharer(address)) {
-          out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
+        CacheEntry pf_entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+        if (isCCXSharer(address)) {
+          if (machineIDToMachineType(pf_entry.DirtyOwner) == MachineType:CorePair) {
+            // M or O state: probe only the dirty owner
+            out_msg.Destination.add(pf_entry.DirtyOwner);
+          } else if (pf_entry.Sharers.count() == 1) {
+            // E state (single clean holder): probe to downgrade E→S
+            out_msg.Destination := pf_entry.Sharers;
+          }
+          // else: all S, no probe needed
         }
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
@@ -644,9 +645,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
             out_msg.Type := TriggerType:AcksComplete;
           }
         }
-        DPRINTF(RubySlicc, "%s\n", (out_msg));
-        APPEND_TRANSITION_COMMENT(" sc: Acks remaining: ");
-        APPEND_TRANSITION_COMMENT(tbe.NumPendingAcks);
         tbe.ProbeRequestStartTime := curCycle();
       }
     }
@@ -659,8 +657,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         out_msg.Type := ProbeRequestType:PrbInv;
         out_msg.ReturnData := false;
         out_msg.MessageSize := MessageSizeType:Control;
-        if(isCPUSharer(address)) {
-          out_msg.Destination.broadcast(MachineType:CorePair);  // won't be realistic for multisocket
+        CacheEntry pf_entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+        if (isCCXSharer(address)) {
+          out_msg.Destination := pf_entry.Sharers;
         }
         out_msg.Destination.remove(in_msg.Requestor);
         tbe.NumPendingAcks := out_msg.Destination.count();
@@ -670,9 +669,6 @@ machine(MachineType:Directory, "AMD Baseline protocol")
             out_msg.Type := TriggerType:AcksComplete;
           }
         }
-        APPEND_TRANSITION_COMMENT(" ic: Acks remaining: ");
-        APPEND_TRANSITION_COMMENT(tbe.NumPendingAcks);
-        DPRINTF(RubySlicc, "%s\n", out_msg);
         tbe.ProbeRequestStartTime := curCycle();
       }
     }
@@ -861,20 +857,12 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   action(apf_allocateProbeFilterEntry, "apf", desc="Allocate probe filte entry") {
     if (!ProbeFilterMemory.isTagPresent(address)) {
-        if (inclusiveDir) {
-            assert(ProbeFilterMemory.cacheAvail(address));
-        } else if (ProbeFilterMemory.cacheAvail(address) == false) {
-          Addr victim := ProbeFilterMemory.cacheProbe(address);
-          ProbeFilterMemory.deallocate(victim);
-        }
         assert(ProbeFilterMemory.cacheAvail(address));
         CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.allocate(address, new CacheEntry));
         APPEND_TRANSITION_COMMENT(" allocating a new probe filter entry");
-        entry.pfState := ProbeFilterState:NT;
-        if (inclusiveDir) {
-          entry.pfState := ProbeFilterState:T;
-        }
-        entry.isOnCPU := false;
+        entry.pfState := ProbeFilterState:T;
+        entry.Sharers.clear();
+        entry.DirtyOwner := machineID;
     }
   }
 
@@ -901,32 +889,40 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     peek(requestNetwork_in, CPURequestMsg) {
       assert(ProbeFilterMemory.isTagPresent(address));
       CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-      if (in_msg.Type == CoherenceRequestType:WriteThrough) {
-        entry.pfState := ProbeFilterState:T;
-        entry.isOnCPU := false;
+      if (in_msg.Type == CoherenceRequestType:RdBlkM ||
+          in_msg.Type == CoherenceRequestType:CtoD) {
+        entry.Sharers.clear();
+        entry.Sharers.add(in_msg.Requestor);
+        entry.DirtyOwner := in_msg.Requestor;
+      } else if (in_msg.Type == CoherenceRequestType:RdBlk) {
+        // PrbDowngrade retains the dirty owner as S-holder; keep existing Sharers
+        entry.Sharers.add(in_msg.Requestor);
+        entry.DirtyOwner := machineID;
+      } else if (in_msg.Type == CoherenceRequestType:RdBlkS) {
+        entry.Sharers.add(in_msg.Requestor);
+        entry.DirtyOwner := machineID;
       } else if (in_msg.Type == CoherenceRequestType:Atomic ||
                  in_msg.Type == CoherenceRequestType:AtomicReturn ||
                  in_msg.Type == CoherenceRequestType:AtomicNoReturn) {
-        entry.pfState := ProbeFilterState:T;
-        entry.isOnCPU := false;
-      } else if (in_msg.Type == CoherenceRequestType:RdBlkM) {
-        entry.pfState := ProbeFilterState:T;
-        entry.isOnCPU := false;
-      } else if (in_msg.Type == CoherenceRequestType:CtoD) {
-        entry.pfState := ProbeFilterState:T;
-        entry.isOnCPU := false;
-      }
-      if(machineIDToMachineType(in_msg.Requestor) == MachineType:CorePair) {
-        entry.isOnCPU := true;
+        entry.Sharers.clear();
+        entry.Sharers.add(in_msg.Requestor);
+        entry.DirtyOwner := in_msg.Requestor;
+      } else if (in_msg.Type == CoherenceRequestType:WriteThrough) {
+        error("WriteThrough not expected in MOESI_AMD_4th_PF");
       }
     }
   }
 
   action(rmcd_removeSharerConditional, "rmcd", desc="remove sharer from probe Filter, conditional") {
-    // isOnCPU is intentionally not cleared here.
-    // A single VicClean/VicDirty from one CorePair does not mean all CorePairs
-    // have evicted the block; clearing the bit would cause subsequent probes
-    // to skip CorePairs that still hold valid copies, leading to coherence violations.
+    peek(requestNetwork_in, CPURequestMsg) {
+      if (ProbeFilterMemory.isTagPresent(address)) {
+        CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+        entry.Sharers.remove(in_msg.Requestor);
+        if (in_msg.Requestor == entry.DirtyOwner) {
+          entry.DirtyOwner := machineID;
+        }
+      }
+    }
   }
 
   action(sf_setForwardReqTime, "sf", desc="...") {

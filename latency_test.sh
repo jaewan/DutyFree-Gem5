@@ -64,7 +64,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_read_8t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
-    -o "524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144;524288 324011 512 r 262144" \
+    -o "524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144" \
     > logs/latency/l2_read_8t.log 2>&1 &
 echo "  started: l2_read_8t"
 
@@ -83,7 +83,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_write_8t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
-    -o "524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144;524288 324011 512 w 262144" \
+    -o "524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144" \
     > logs/latency/l2_write_8t.log 2>&1 &
 echo "  started: l2_write_8t"
 
@@ -93,7 +93,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_1t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c testcase/latency/latency_bench \
-    -o "4194304 2592089 2 r 4194304" \
+    -o "4194304 2592089 1 r 4194304" \
     > logs/latency/mem_read_1t.log 2>&1 &
 echo "  started: mem_read_1t"
 
@@ -102,7 +102,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_8t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
-    -o "4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304;4194304 2592089 2 r 4194304" \
+    -o "4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304" \
     > logs/latency/mem_read_8t.log 2>&1 &
 echo "  started: mem_read_8t"
 
@@ -112,7 +112,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_1t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c testcase/latency/latency_bench \
-    -o "4194304 2592089 2 w 4194304" \
+    -o "4194304 2592089 1 w 4194304" \
     > logs/latency/mem_write_1t.log 2>&1 &
 echo "  started: mem_write_1t"
 
@@ -121,7 +121,7 @@ build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_8t_m5out \
     --ruby --cpu-type=TimingSimpleCPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
-    -o "4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304;4194304 2592089 2 w 4194304" \
+    -o "4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304" \
     > logs/latency/mem_write_8t.log 2>&1 &
 echo "  started: mem_write_8t"
 
