@@ -96,6 +96,7 @@ class CPCntrl(MOESI_AMD_4th_PF_CorePair_Controller, CntrlBase):
         self.sequencer1.is_cpu_sequencer = True
 
         self.mandatory_queue_latency = 2
+        self.l2_hit_latency = options.l2_latency
         self.issue_latency = options.cpu_to_dir_latency
         self.send_evictions = send_evicts(options)
         self.ruby_system = ruby_system
@@ -136,7 +137,7 @@ def define_options(parser):
         "--no-resource-stalls", action="store_false", default=True
     )
     parser.add_argument("--num-tbes", type=int, default=256)
-    parser.add_argument("--l2-latency", type=int, default=50)
+    parser.add_argument("--l2-latency", type=int, default=9)
     parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")
     # Override common cache defaults to match AMD Zen 4c
