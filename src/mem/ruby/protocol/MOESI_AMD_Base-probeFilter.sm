@@ -142,6 +142,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     ProbeFilterState pfState,   desc="ProbeFilter state",default="Directory_ProbeFilterState_T";
     NetDest Sharers,            desc="CCX(CorePair) set holding this line";
     MachineID DirtyOwner,       desc="CCX in M or O state; MachineType:NUM if none";
+    bool isShared,              desc="true if all holders are in clean S state; false if any holder may have E/M";
   }
 
   structure(TBE, desc="...") {
@@ -615,9 +616,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
     enqueue(probeNetwork_out, NBProbeRequestMsg, response_latency) {
       out_msg.addr := address;
       out_msg.Type := ProbeRequestType:PrbInv;
-      out_msg.ReturnData := true;
       out_msg.MessageSize := MessageSizeType:Control;
       CacheEntry pf_entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+      out_msg.ReturnData := !pf_entry.isShared;
       if (isCCXSharer(address)) {
         out_msg.Destination := pf_entry.Sharers;
       }
@@ -880,6 +881,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         entry.pfState := ProbeFilterState:T;
         entry.Sharers.clear();
         entry.DirtyOwner := machineID;
+        entry.isShared := false;
     }
   }
 
@@ -911,22 +913,33 @@ machine(MachineType:Directory, "AMD Baseline protocol")
         entry.Sharers.clear();
         entry.Sharers.add(in_msg.Requestor);
         entry.DirtyOwner := in_msg.Requestor;
+        entry.isShared := false;
       } else if (in_msg.Type == CoherenceRequestType:RdBlk) {
         // PrbDowngrade retains the dirty owner as S-holder; keep existing Sharers
         entry.Sharers.add(in_msg.Requestor);
         entry.DirtyOwner := machineID;
+        entry.isShared := false;  // updated to tbe.Cached via spf_setSharedFlag at response time
       } else if (in_msg.Type == CoherenceRequestType:RdBlkS) {
         entry.Sharers.add(in_msg.Requestor);
         entry.DirtyOwner := machineID;
+        entry.isShared := true;
       } else if (in_msg.Type == CoherenceRequestType:Atomic ||
                  in_msg.Type == CoherenceRequestType:AtomicReturn ||
                  in_msg.Type == CoherenceRequestType:AtomicNoReturn) {
         entry.Sharers.clear();
         entry.Sharers.add(in_msg.Requestor);
         entry.DirtyOwner := in_msg.Requestor;
+        entry.isShared := false;
       } else if (in_msg.Type == CoherenceRequestType:WriteThrough) {
         error("WriteThrough not expected in MOESI_AMD_4th_PF");
       }
+    }
+  }
+
+  action(spf_setSharedFlag, "spf", desc="update PF entry isShared from tbe.Cached after probes complete") {
+    if (ProbeFilterMemory.isTagPresent(address)) {
+      CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+      entry.isShared := tbe.Cached;
     }
   }
 
@@ -1193,6 +1206,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   transition(B_M, MemData, B){} {
     mt_writeMemDataToTBE;
+    spf_setSharedFlag;
     es_sendResponseES;
     wd_writeBackData;
     dt_deallocateTBE;
@@ -1241,6 +1255,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   transition(B_Pm, ProbeAcksComplete, B){} {
     sf_setForwardReqTime;
+    spf_setSharedFlag;
     es_sendResponseES;
     wd_writeBackData;
     lqDirty_queueMemWBFromTBE;
