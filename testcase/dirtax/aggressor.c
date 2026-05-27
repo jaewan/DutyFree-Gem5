@@ -1,36 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/*
- * Sequential streaming aggressor — matches paper conditions (minus CXL).
- *
- * Paper conditions reflected:
- *   - Sequential stride-1 access (prefetcher-friendly, matches "sequential 64-byte reads")
- *   - Read-only (no writes): WORM/immutable stream scenario from §2
- *   - No dependency chain: bandwidth-bound, not latency-bound
- *
- * Not reflected (gem5 SE mode limitation):
- *   - CXL device memory: using local malloc instead
- *
- * Array (1MB) > L2 (512KB) → every pass causes L2 evictions → directory enrollment.
- * Sequential pattern lets the hardware prefetcher (if present) pipeline requests.
- */
-#define N      262144   /* 1MB / 4B */
-#define PASSES 50       /* ~2× victim baseline duration */
+/* Sequential streaming aggressor.
+ * argv[1] = size_mb  (float, default 4.0; e.g. 1.5 for 1.5 MiB)
+ * Infinite loop — runs until gem5 simulation ends (victim calls m5_exit).
+ * Sequential stride-1 read-only — bandwidth-bound, no dependency chain.
+ * Static array avoids malloc/mmap so gem5 SE VMA tracking is stable. */
 
-int main(void)
+#define MAX_MB 16
+static volatile int arr[MAX_MB * 1024 * 1024 / sizeof(int)];
+
+int main(int argc, char *argv[])
 {
-    int *arr = (int *)malloc(N * sizeof(int));
-    if (!arr) { fprintf(stderr, "malloc fail\n"); return 1; }
+    double size_mb = argc > 1 ? atof(argv[1]) : 4.0;
+    if (size_mb > MAX_MB) size_mb = MAX_MB;
+    long N = (long)(size_mb * 1024.0 * 1024.0) / (long)sizeof(int);
 
-    for (int i = 0; i < N; i++) arr[i] = i;
-
-    long sum = 0;
-    for (int p = 0; p < PASSES; p++)
-        for (int i = 0; i < N; i++)
-            sum += arr[i];   /* sequential read-only, no dependency chain */
-
-    printf("aggressor: sum=%ld\n", sum);
-    free(arr);
-    return 0;
+    volatile long sum = 0;
+    while (1)
+        for (long i = 0; i < N; i++)
+            sum += arr[i];
 }

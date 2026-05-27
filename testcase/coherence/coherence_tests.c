@@ -33,28 +33,18 @@
 /* Cache-line-aligned padding to avoid false sharing in control vars */
 #define CL 64
 
-/* Spin barrier: all N threads must arrive before any proceeds */
-typedef struct {
-    volatile int count  __attribute__((aligned(CL)));
-    volatile int round  __attribute__((aligned(CL)));
-    int n;
-} SpinBarrier;
-
-static void sb_init(SpinBarrier *b, int n) { b->count=0; b->round=0; b->n=n; }
-
-static void sb_wait(SpinBarrier *b) {
-    int r = b->round;
-    if (__sync_add_and_fetch(&b->count, 1) == b->n) {
-        b->count = 0;
-        __sync_fetch_and_add(&b->round, 1);   /* release others */
-    } else {
-        while (b->round == r) { /* spin */ }  /* wait for release */
-    }
-}
 
 #define PASS(name) printf("PASS  [%s]\n", name)
 #define FAIL(name, ...) do { printf("FAIL  [%s] ", name); printf(__VA_ARGS__); printf("\n"); } while(0)
 #define RESULT(name, ok, ...) do { if(ok) PASS(name); else FAIL(name, __VA_ARGS__); } while(0)
+
+/* ── spin-wait helpers (no pthread_join / no atomic RMW) ─────────────────
+ * pthread_join uses futex internally and can hang in gem5 SE+Ruby when
+ * threads exit. Use per-thread volatile done flag + spin-wait instead.
+ */
+#define T4_DONE(id)   do { t4_done[(id)] = 1; return NULL; } while(0)
+#define T4_WAIT(id)   do { while(!t4_done[(id)]) {} } while(0)
+static volatile int t4_done[4] __attribute__((aligned(CL)));
 
 /* ── Test 0: Invalidation ─────────────────────────────────
  * CPU0 writes array, sets flag.
@@ -99,28 +89,29 @@ static void test_invalidation(void) {
  */
 #define SHR_N 512
 static int shr_arr[SHR_N];
-static SpinBarrier shr_bar;
+static volatile int shr_flag __attribute__((aligned(CL)));
 static int shr_results[2];
 
 static void *shr_reader(void *arg) {
     int id = (int)(long)arg;
-    sb_wait(&shr_bar);   /* wait for main to finish writing */
+    while (!shr_flag) {}      /* spin until main sets flag */
+    __sync_synchronize();
     int ok = 1;
     for (int i = 0; i < SHR_N; i++)
         if (shr_arr[i] != i * 3) { ok = 0; break; }
     shr_results[id] = ok;
-    return NULL;
+    T4_DONE(id);
 }
 static void test_sharing(void) {
-    sb_init(&shr_bar, 3);   /* main + 2 threads */
+    memset((void*)t4_done, 0, sizeof(t4_done));
+    shr_flag = 0;
     pthread_t t0, t1;
     pthread_create(&t0, NULL, shr_reader, (void*)0L);
     pthread_create(&t1, NULL, shr_reader, (void*)1L);
-    for (int i = 0; i < SHR_N; i++) shr_arr[i] = i * 3;   /* write while threads wait */
+    for (int i = 0; i < SHR_N; i++) shr_arr[i] = i * 3;
     __sync_synchronize();
-    sb_wait(&shr_bar);   /* release threads */
-    pthread_join(t0, NULL);
-    pthread_join(t1, NULL);
+    shr_flag = 1;             /* release threads */
+    T4_WAIT(0); T4_WAIT(1);
     RESULT("sharing_t0", shr_results[0], "stale read");
     RESULT("sharing_t1", shr_results[1], "stale read");
 }
@@ -166,7 +157,6 @@ static void test_pingpong(void) {
  */
 #define OS_N 256
 static int os_arr[OS_N];
-static SpinBarrier os_bar;
 static volatile int os_flag __attribute__((aligned(CL)));
 static int os_ok[3];
 
@@ -211,14 +201,6 @@ static void test_ostate(void) {
     RESULT("ostate_t0_read", os_ok[0], "T0 stale after T1 shared read");
     RESULT("ostate_t1_read", os_ok[1], "T1 stale after T2 write");
 }
-
-/* ── helpers for 4-thread tests (spin-wait, no pthread_join) ─────────────
- * pthread_join uses futex internally and can hang in gem5 SE+Ruby when
- * threads exit. Use per-thread volatile done flag + spin-wait instead.
- */
-#define T4_DONE(id)   do { t4_done[(id)] = 1; return NULL; } while(0)
-#define T4_WAIT(id)   do { while(!t4_done[(id)]) {} } while(0)
-static volatile int t4_done[4] __attribute__((aligned(CL)));
 
 /* ── Test 5: inter_cp_share ───────────────────────────────
  * CPU0 (CP0) writes, CPU2 (CP1) reads → must see written value.
