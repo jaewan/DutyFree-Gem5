@@ -59,6 +59,7 @@
 #include "debug/Quiesce.hh"
 #include "debug/WorkItems.hh"
 #include "dev/net/dist_iface.hh"
+#include "mem/page_table.hh"
 #include "mem/se_translating_port_proxy.hh"
 #include "mem/translating_port_proxy.hh"
 #include "params/BaseCPU.hh"
@@ -486,6 +487,45 @@ triggerWorkloadEvent(ThreadContext *tc)
 {
     DPRINTF(PseudoInst, "pseudo_inst::triggerWorkloadEvent()\n");
     tc->getSystemPtr()->workload->event(tc);
+}
+
+void
+setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::setstreaming(addr=%#x, size=%#x)\n",
+            addr, size);
+
+    // SE mode only: walk page table and set Streaming flag on each page
+    auto *process = tc->getProcessPtr();
+    if (!process) {
+        warn("pseudo_inst::setstreaming called outside SE mode, ignored\n");
+        return;
+    }
+
+    EmulationPageTable *pt = process->pTable;
+    const Addr page_size = pt->pageSize();
+    Addr va = pt->pageAlign(addr);
+    Addr end = pt->pageAlign(addr + size - 1) + page_size;
+
+    int total_pages = 0, marked_pages = 0;
+    for (; va < end; va += page_size) {
+        total_pages++;
+        // cast is safe: pTable is non-const
+        auto *entry =
+            const_cast<EmulationPageTable::Entry*>(pt->lookup(va));
+        if (!entry) {
+            // BSS / heap pages not yet faulted in: pre-allocate directly
+            // without going through the CPU TLB-miss simulation path.
+            process->allocateMem(va, page_size, /*clobber=*/false);
+            entry = const_cast<EmulationPageTable::Entry*>(pt->lookup(va));
+        }
+        if (entry) {
+            entry->flags |= EmulationPageTable::Streaming;
+            marked_pages++;
+        }
+    }
+    warn("setstreaming: addr=%#x size=%#x → %d/%d pages marked\n",
+         addr, size, marked_pages, total_pages);
 }
 
 //

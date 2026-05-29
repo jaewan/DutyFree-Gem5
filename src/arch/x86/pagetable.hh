@@ -88,13 +88,15 @@ namespace X86ISA
         bool patBit;
         // Whether or not memory on this page can be executed.
         bool noExec;
+        // Whether this page is a STREAMING region (PF bypass).
+        bool streaming;
         // A sequence number to keep track of LRU.
         uint64_t lruSeq;
 
         TlbEntryTrie::Handle trieHandle;
 
         TlbEntry(Addr asn, Addr _vaddr, Addr _paddr,
-                 bool uncacheable, bool read_only);
+                 bool uncacheable, bool read_only, bool streaming=false);
         TlbEntry();
 
         void

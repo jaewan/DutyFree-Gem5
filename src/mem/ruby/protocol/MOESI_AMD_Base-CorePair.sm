@@ -200,6 +200,7 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     bool Dirty,                 desc="Is the data dirty (diff than memory)?";
     DataBlock DataBlk,          desc="data for the block";
     bool FromL2, default="false", desc="block just moved from L2";
+    bool Streaming, default="false", desc="STREAMING region: skip ProbeFilter rmcd on eviction";
   }
 
   structure(TBE, desc="...") {
@@ -208,6 +209,7 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     bool Dirty,              desc="Is the data dirty (different than memory)?";
     int NumPendingMsgs,      desc="Number of acks/data messages that this processor is waiting for";
     bool Shared,             desc="Victim hit by shared probe";
+    bool Streaming, default="false", desc="STREAMING region: skip ProbeFilter enrollment";
    }
 
   structure(TBETable, external="yes") {
@@ -709,6 +711,13 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
       DPRINTF(RubySlicc,"%s\n",out_msg.Destination);
       out_msg.MessageSize := MessageSizeType:Request_Control;
       out_msg.InitialRequestTime := curCycle();
+      if (is_valid(tbe)) {
+        out_msg.isStreaming := tbe.Streaming;
+      } else {
+        peek(mandatoryQueue_in, RubyRequest) {
+          out_msg.isStreaming := in_msg.isStreaming;
+        }
+      }
     }
   }
 
@@ -720,6 +729,13 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
       out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
       out_msg.MessageSize := MessageSizeType:Request_Control;
       out_msg.InitialRequestTime := curCycle();
+      if (is_valid(tbe)) {
+        out_msg.isStreaming := tbe.Streaming;
+      } else {
+        peek(mandatoryQueue_in, RubyRequest) {
+          out_msg.isStreaming := in_msg.isStreaming;
+        }
+      }
     }
   }
 
@@ -731,6 +747,13 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
       out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
       out_msg.MessageSize := MessageSizeType:Request_Control;
       out_msg.InitialRequestTime := curCycle();
+      if (is_valid(tbe)) {
+        out_msg.isStreaming := tbe.Streaming;
+      } else {
+        peek(mandatoryQueue_in, RubyRequest) {
+          out_msg.isStreaming := in_msg.isStreaming;
+        }
+      }
     }
   }
 
@@ -801,6 +824,10 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     tbe.DataBlk := cache_entry.DataBlk;  // Data only used for WBs
     tbe.Dirty := cache_entry.Dirty;
     tbe.Shared := false;
+    tbe.Streaming := false;
+    peek(mandatoryQueue_in, RubyRequest) {
+      tbe.Streaming := in_msg.isStreaming;
+    }
   }
 
   action(d_deallocateTBE, "d", desc="Deallocate TBE") {

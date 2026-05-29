@@ -85,6 +85,7 @@ class RubyRequest : public Message
     bool m_isGLCSet;
     bool m_isSLCSet;
     bool m_isSecure;
+    bool m_isStreaming;
 
     RubyRequest(Tick curTime, int block_size, RubySystem *rs,
         uint64_t _paddr, int _len,
@@ -113,9 +114,11 @@ class RubyRequest : public Message
         if (_pkt) {
             m_isGLCSet = m_pkt->req->isGLCSet();
             m_isSLCSet = m_pkt->req->isSLCSet();
+            m_isStreaming = m_pkt->req->isStreamingSet();
         } else {
             m_isGLCSet = 0;
             m_isSLCSet = 0;
+            m_isStreaming = false;
         }
     }
 
@@ -144,9 +147,11 @@ class RubyRequest : public Message
         if (_pkt) {
             m_isGLCSet = m_pkt->req->isGLCSet();
             m_isSLCSet = m_pkt->req->isSLCSet();
+            m_isStreaming = m_pkt->req->isStreamingSet();
         } else {
             m_isGLCSet = 0;
             m_isSLCSet = 0;
+            m_isStreaming = false;
         }
     }
 
@@ -219,10 +224,11 @@ class RubyRequest : public Message
         if (_pkt) {
             m_isGLCSet = m_pkt->req->isGLCSet();
             m_isSLCSet = m_pkt->req->isSLCSet();
-
+            m_isStreaming = m_pkt->req->isStreamingSet();
         } else {
             m_isGLCSet = 0;
             m_isSLCSet = 0;
+            m_isStreaming = false;
         }
     }
 
@@ -243,6 +249,7 @@ class RubyRequest : public Message
     const int& getSize() const { return m_Size; }
     const PrefetchBit& getPrefetch() const { return m_Prefetch; }
     RequestPtr getRequestPtr() const { return m_pkt->req; }
+    bool isStreamingSet() const { return m_isStreaming; }
 
     void setWriteMask(uint32_t offset, uint32_t len,
         std::vector< std::pair<int,AtomicOpFunctor*>> atomicOps);

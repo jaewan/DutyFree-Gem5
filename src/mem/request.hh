@@ -343,6 +343,8 @@ class Request : public Extensible<Request>
         CACHED                  = 0x00000400,
         READ_WRITE              = 0x00000800,
         SHARED                  = 0x00001000,
+        /** PF bypass hint: skip ProbeFilter enrollment for STREAMING region */
+        STREAMING_BIT           = 0x00002000,
 
     };
 
@@ -1105,6 +1107,9 @@ class Request : public Extensible<Request>
      */
     bool isGLCSet() const {return _cacheCoherenceFlags.isSet(GLC_BIT); }
     bool isSLCSet() const {return _cacheCoherenceFlags.isSet(SLC_BIT); }
+    bool isStreamingSet() const {
+        return _cacheCoherenceFlags.isSet(STREAMING_BIT);
+    }
 
     /**
      * Accessor functions for the memory space configuration flags and used by

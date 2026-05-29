@@ -906,32 +906,41 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   action(upf_updateProbeFilter, "upf", desc="") {
     peek(requestNetwork_in, CPURequestMsg) {
-      assert(ProbeFilterMemory.isTagPresent(address));
-      CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
-      if (in_msg.Type == CoherenceRequestType:RdBlkM ||
-          in_msg.Type == CoherenceRequestType:CtoD) {
-        entry.Sharers.clear();
-        entry.Sharers.add(in_msg.Requestor);
-        entry.DirtyOwner := in_msg.Requestor;
-        entry.isShared := false;
-      } else if (in_msg.Type == CoherenceRequestType:RdBlk) {
-        // PrbDowngrade retains the dirty owner as S-holder; keep existing Sharers
-        entry.Sharers.add(in_msg.Requestor);
-        entry.DirtyOwner := machineID;
-        entry.isShared := false;  // updated to tbe.Cached via spf_setSharedFlag at response time
-      } else if (in_msg.Type == CoherenceRequestType:RdBlkS) {
-        entry.Sharers.add(in_msg.Requestor);
-        entry.DirtyOwner := machineID;
-        entry.isShared := true;
-      } else if (in_msg.Type == CoherenceRequestType:Atomic ||
-                 in_msg.Type == CoherenceRequestType:AtomicReturn ||
-                 in_msg.Type == CoherenceRequestType:AtomicNoReturn) {
-        entry.Sharers.clear();
-        entry.Sharers.add(in_msg.Requestor);
-        entry.DirtyOwner := in_msg.Requestor;
-        entry.isShared := false;
-      } else if (in_msg.Type == CoherenceRequestType:WriteThrough) {
-        error("WriteThrough not expected in MOESI_AMD_4th_PF");
+      // STREAMING requests skip ProbeFilter enrollment to avoid back-probes
+      if (in_msg.isStreaming) {
+        DPRINTF(RubySlicc, "PF_skip: STREAMING addr=%s requestor=%s\n",
+                address, in_msg.Requestor);
+      }
+      if (!in_msg.isStreaming) {
+        DPRINTF(RubySlicc, "PF_enroll: NON-STREAMING addr=%s requestor=%s\n",
+                address, in_msg.Requestor);
+        assert(ProbeFilterMemory.isTagPresent(address));
+        CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
+        if (in_msg.Type == CoherenceRequestType:RdBlkM ||
+            in_msg.Type == CoherenceRequestType:CtoD) {
+          entry.Sharers.clear();
+          entry.Sharers.add(in_msg.Requestor);
+          entry.DirtyOwner := in_msg.Requestor;
+          entry.isShared := false;
+        } else if (in_msg.Type == CoherenceRequestType:RdBlk) {
+          // PrbDowngrade retains the dirty owner as S-holder; keep existing Sharers
+          entry.Sharers.add(in_msg.Requestor);
+          entry.DirtyOwner := machineID;
+          entry.isShared := false;  // updated to tbe.Cached via spf_setSharedFlag at response time
+        } else if (in_msg.Type == CoherenceRequestType:RdBlkS) {
+          entry.Sharers.add(in_msg.Requestor);
+          entry.DirtyOwner := machineID;
+          entry.isShared := true;
+        } else if (in_msg.Type == CoherenceRequestType:Atomic ||
+                   in_msg.Type == CoherenceRequestType:AtomicReturn ||
+                   in_msg.Type == CoherenceRequestType:AtomicNoReturn) {
+          entry.Sharers.clear();
+          entry.Sharers.add(in_msg.Requestor);
+          entry.DirtyOwner := in_msg.Requestor;
+          entry.isShared := false;
+        } else if (in_msg.Type == CoherenceRequestType:WriteThrough) {
+          error("WriteThrough not expected in MOESI_AMD_4th_PF");
+        }
       }
     }
   }
