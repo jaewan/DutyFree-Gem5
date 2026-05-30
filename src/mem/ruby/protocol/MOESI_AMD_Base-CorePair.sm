@@ -39,6 +39,7 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
    bool send_evictions := "False";
    Cycles issue_latency := 5;  // time to send data down to NB
    Cycles l2_hit_latency := 18;
+   bool llc_streaming_bypass := "False";
 
   // BEGIN Core Buffers
 
@@ -126,6 +127,8 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     M1_Ms, AccessPermission:Read_Write, desc="...";
 
     I_C, AccessPermission:Invalid, desc="Invalid, but waiting for WBAck from NB from canceled writeback";
+    I_S0, AccessPermission:Busy, desc="Invalid, streaming LLC bypass fill pending (cluster 0)";
+    I_S1, AccessPermission:Busy, desc="Invalid, streaming LLC bypass fill pending (cluster 1)";
     S0_C, AccessPermission:Busy, desc="MO_S0 hit by invalidating probe, waiting for WBAck form NB for canceled WB";
     S1_C, AccessPermission:Busy, desc="MO_S1 hit by invalidating probe, waiting for WBAck form NB for canceled WB";
     S_C, AccessPermission:Busy, desc="S*_C got NB_AckS, still waiting for WBAck";
@@ -139,6 +142,10 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     C0_Load_L1hit,             desc="Cluster 0 load, L1 hit";
     C1_Load_L1miss,            desc="Cluster 1 load L1 missed";
     C1_Load_L1hit,             desc="Cluster 1 load L1 hit";
+    C0_Load_L1miss_Stream,     desc="Cluster 0 load, L1 miss, streaming LLC bypass";
+    C0_Load_L1hit_Stream,      desc="Cluster 0 load, L1 hit, streaming LLC bypass";
+    C1_Load_L1miss_Stream,     desc="Cluster 1 load, L1 miss, streaming LLC bypass";
+    C1_Load_L1hit_Stream,      desc="Cluster 1 load, L1 hit, streaming LLC bypass";
     Ifetch0_L1hit,             desc="Instruction fetch, hit in the L1";
     Ifetch1_L1hit,             desc="Instruction fetch, hit in the L1";
     Ifetch0_L1miss,            desc="Instruction fetch, missed in the L1";
@@ -570,8 +577,14 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
           if (mod(in_msg.contextId, 2) == 1) {
             if (L1D1cache.isTagPresent(in_msg.LineAddress)) {
               if (in_msg.Type == RubyRequestType:LD) {
-                trigger(Event:C1_Load_L1hit, in_msg.LineAddress, cache_entry,
-                        tbe);
+                if (llc_streaming_bypass && in_msg.isStreaming &&
+                    !L2cache.isTagPresent(in_msg.LineAddress)) {
+                  trigger(Event:C1_Load_L1hit_Stream, in_msg.LineAddress,
+                          cache_entry, tbe);
+                } else {
+                  trigger(Event:C1_Load_L1hit, in_msg.LineAddress, cache_entry,
+                          tbe);
+                }
               } else {
                 // Stores must write through, make sure L2 avail.
                 if (presentOrAvail2(in_msg.LineAddress)) {
@@ -584,33 +597,53 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
                 }
               }
             } else {
-              if (presentOrAvail2(in_msg.LineAddress)) {
+              if (llc_streaming_bypass && in_msg.isStreaming &&
+                  in_msg.Type == RubyRequestType:LD &&
+                  !L2cache.isTagPresent(in_msg.LineAddress)) {
                 if (presentOrAvailD1(in_msg.LineAddress)) {
-                  if (in_msg.Type == RubyRequestType:LD) {
-                    trigger(Event:C1_Load_L1miss, in_msg.LineAddress,
-                            cache_entry, tbe);
-                  } else {
-                    trigger(Event:C1_Store_L1miss, in_msg.LineAddress,
-                            cache_entry, tbe);
-                  }
+                  trigger(Event:C1_Load_L1miss_Stream, in_msg.LineAddress,
+                          cache_entry, tbe);
                 } else {
-                  // Check if the line we want to evict is not locked
                   Addr victim := L1D1cache.cacheProbe(in_msg.LineAddress);
                   check_on_cache_probe(mandatoryQueue_in, victim);
                   trigger(Event:L1D1_Repl, victim,
                           getCacheEntry(victim), TBEs.lookup(victim));
                 }
-              } else { // not present or avail in L2
-                Addr victim := L2cache.cacheProbe(in_msg.LineAddress);
-                trigger(Event:L2_Repl, victim, getCacheEntry(victim), TBEs.lookup(victim));
+              } else {
+                if (presentOrAvail2(in_msg.LineAddress)) {
+                  if (presentOrAvailD1(in_msg.LineAddress)) {
+                    if (in_msg.Type == RubyRequestType:LD) {
+                      trigger(Event:C1_Load_L1miss, in_msg.LineAddress,
+                              cache_entry, tbe);
+                    } else {
+                      trigger(Event:C1_Store_L1miss, in_msg.LineAddress,
+                              cache_entry, tbe);
+                    }
+                  } else {
+                    // Check if the line we want to evict is not locked
+                    Addr victim := L1D1cache.cacheProbe(in_msg.LineAddress);
+                    check_on_cache_probe(mandatoryQueue_in, victim);
+                    trigger(Event:L1D1_Repl, victim,
+                            getCacheEntry(victim), TBEs.lookup(victim));
+                  }
+                } else { // not present or avail in L2
+                  Addr victim := L2cache.cacheProbe(in_msg.LineAddress);
+                  trigger(Event:L2_Repl, victim, getCacheEntry(victim), TBEs.lookup(victim));
+                }
               }
             }
           } else {
             Entry L1D0cache_entry := getL1CacheEntry(in_msg.LineAddress, 0);
             if (is_valid(L1D0cache_entry)) {
               if (in_msg.Type == RubyRequestType:LD) {
-                trigger(Event:C0_Load_L1hit, in_msg.LineAddress, cache_entry,
-                    tbe);
+                if (llc_streaming_bypass && in_msg.isStreaming &&
+                    !L2cache.isTagPresent(in_msg.LineAddress)) {
+                  trigger(Event:C0_Load_L1hit_Stream, in_msg.LineAddress,
+                      cache_entry, tbe);
+                } else {
+                  trigger(Event:C0_Load_L1hit, in_msg.LineAddress, cache_entry,
+                      tbe);
+                }
               } else {
                 if (presentOrAvail2(in_msg.LineAddress)) {
                   trigger(Event:C0_Store_L1hit, in_msg.LineAddress, cache_entry,
@@ -622,26 +655,40 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
                 }
               }
             } else {
-              if (presentOrAvail2(in_msg.LineAddress)) {
+              if (llc_streaming_bypass && in_msg.isStreaming &&
+                  in_msg.Type == RubyRequestType:LD &&
+                  !L2cache.isTagPresent(in_msg.LineAddress)) {
                 if (presentOrAvailD0(in_msg.LineAddress)) {
-                  if (in_msg.Type == RubyRequestType:LD) {
-                    trigger(Event:C0_Load_L1miss, in_msg.LineAddress,
-                        cache_entry, tbe);
-                  } else {
-                    trigger(Event:C0_Store_L1miss, in_msg.LineAddress,
-                            cache_entry, tbe);
-                  }
+                  trigger(Event:C0_Load_L1miss_Stream, in_msg.LineAddress,
+                      cache_entry, tbe);
                 } else {
-                  // Check if the line we want to evict is not locked
                   Addr victim := L1D0cache.cacheProbe(in_msg.LineAddress);
                   check_on_cache_probe(mandatoryQueue_in, victim);
                   trigger(Event:L1D0_Repl, victim, getCacheEntry(victim),
                           TBEs.lookup(victim));
                 }
               } else {
-                Addr victim := L2cache.cacheProbe(in_msg.LineAddress);
-                trigger(Event:L2_Repl, victim, getCacheEntry(victim),
-                        TBEs.lookup(victim));
+                if (presentOrAvail2(in_msg.LineAddress)) {
+                  if (presentOrAvailD0(in_msg.LineAddress)) {
+                    if (in_msg.Type == RubyRequestType:LD) {
+                      trigger(Event:C0_Load_L1miss, in_msg.LineAddress,
+                          cache_entry, tbe);
+                    } else {
+                      trigger(Event:C0_Store_L1miss, in_msg.LineAddress,
+                              cache_entry, tbe);
+                    }
+                  } else {
+                    // Check if the line we want to evict is not locked
+                    Addr victim := L1D0cache.cacheProbe(in_msg.LineAddress);
+                    check_on_cache_probe(mandatoryQueue_in, victim);
+                    trigger(Event:L1D0_Repl, victim, getCacheEntry(victim),
+                            TBEs.lookup(victim));
+                  }
+                } else {
+                  Addr victim := L2cache.cacheProbe(in_msg.LineAddress);
+                  trigger(Event:L2_Repl, victim, getCacheEntry(victim),
+                          TBEs.lookup(victim));
+                }
               }
             }
           }
@@ -830,6 +877,16 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
     }
   }
 
+  action(ts_allocateTBEStreaming, "ts", desc="allocate TBE for streaming LLC bypass (no L2 entry)") {
+    check_allocate(TBEs);
+    TBEs.allocate(address);
+    set_tbe(TBEs.lookup(address));
+    tbe.Dirty := false;
+    tbe.Shared := false;
+    tbe.NumPendingMsgs := 0;
+    tbe.Streaming := true;
+  }
+
   action(d_deallocateTBE, "d", desc="Deallocate TBE") {
     TBEs.deallocate(address);
     unset_tbe();
@@ -897,6 +954,46 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
                             l2entry.DataBlk,
                             true,
                             testAndClearLocalHit(entry));
+  }
+
+  action(l0_loadDoneFromL1Only, "ll0", desc="Cluster 0 load done (LLC bypass, L1 only)") {
+    Entry entry := getL1CacheEntry(address, 0);
+    assert(is_valid(entry));
+    sequencer.readCallback(address, entry.DataBlk, true, MachineType:L1Cache);
+  }
+
+  action(l1_loadDoneFromL1Only, "ll1", desc="Cluster 1 load done (LLC bypass, L1 only)") {
+    Entry entry := getL1CacheEntry(address, 1);
+    assert(is_valid(entry));
+    sequencer1.readCallback(address, entry.DataBlk, true, MachineType:L1Cache);
+  }
+
+  action(xl0_loadDoneStream, "xl0s", desc="Cluster 0 load done, streaming miss (LLC bypass)") {
+    peek(responseToCore_in, ResponseMsg) {
+      assert((machineIDToMachineType(in_msg.Sender) == MachineType:Directory) ||
+              (machineIDToMachineType(in_msg.Sender) == MachineType:L3Cache));
+      Entry entry := getL1CacheEntry(address, 0);
+      assert(is_valid(entry));
+      sequencer.readCallback(address, entry.DataBlk, false,
+                             machineIDToMachineType(in_msg.Sender),
+                             in_msg.InitialRequestTime,
+                             in_msg.ForwardRequestTime,
+                             in_msg.ProbeRequestStartTime);
+    }
+  }
+
+  action(xl1_loadDoneStream, "xl1s", desc="Cluster 1 load done, streaming miss (LLC bypass)") {
+    peek(responseToCore_in, ResponseMsg) {
+      assert((machineIDToMachineType(in_msg.Sender) == MachineType:Directory) ||
+              (machineIDToMachineType(in_msg.Sender) == MachineType:L3Cache));
+      Entry entry := getL1CacheEntry(address, 1);
+      assert(is_valid(entry));
+      sequencer1.readCallback(address, entry.DataBlk, false,
+                              machineIDToMachineType(in_msg.Sender),
+                              in_msg.InitialRequestTime,
+                              in_msg.ForwardRequestTime,
+                              in_msg.ProbeRequestStartTime);
+    }
   }
 
   action(xl0_loadDone, "xl0", desc="Cluster 0 load done") {
@@ -1125,6 +1222,26 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
       entry.Dirty := in_msg.Dirty;
       cache_entry.DataBlk := in_msg.DataBlk;
       cache_entry.Dirty := in_msg.Dirty;
+    }
+  }
+
+  action(w0_writeDcacheL1Only, "wl0", desc="write data to dcache 0 only (LLC bypass, no L2)") {
+    peek(responseToCore_in, ResponseMsg) {
+      Entry entry := getL1CacheEntry(address, 0);
+      assert(is_valid(entry));
+      entry.DataBlk := in_msg.DataBlk;
+      entry.Dirty := false;
+      entry.Streaming := true;
+    }
+  }
+
+  action(w1_writeDcacheL1Only, "wl1", desc="write data to dcache 1 only (LLC bypass, no L2)") {
+    peek(responseToCore_in, ResponseMsg) {
+      Entry entry := getL1CacheEntry(address, 1);
+      assert(is_valid(entry));
+      entry.DataBlk := in_msg.DataBlk;
+      entry.Dirty := false;
+      entry.Streaming := true;
     }
   }
 
@@ -1866,27 +1983,32 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
   // recycles
   transition({I_M0, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E0S, I_ES, IF_E0S, IF_ES,
           IF0_ES, IF1_ES, S_F0, S_F, O_F0, O_F, S_M0, O_M0, Es_F0, Es_F, E0_F,
-          E1_Es, Ms_F0, Ms_F, M0_F, M1_Ms}, C0_Load_L1hit) {} {
+          E1_Es, Ms_F0, Ms_F, M0_F, M1_Ms, I_S0, I_S1},
+          {C0_Load_L1hit, C0_Load_L1hit_Stream}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({IF_E1S, F_S0, F_S1, ES_I, MO_I, MO_S0, MO_S1, Si_F0, Si_F1, S_M1,
-          O_M1, S0, S1, I_C, S0_C, S1_C, S_C}, C0_Load_L1miss) {} {
+          O_M1, S0, S1, I_C, S0_C, S1_C, S_C, I_S0, I_S1},
+          {C0_Load_L1miss, C0_Load_L1miss_Stream}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_M1, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E1S, I_ES, IF_E1S, IF_ES,
           IF0_ES, IF1_ES, S_F1, S_F, O_F1, O_F, S_M1, O_M1, Es_F1, Es_F, E1_F,
-          E0_Es, Ms_F1, Ms_F, M0_Ms, M1_F}, C1_Load_L1hit) {} {
+          E0_Es, Ms_F1, Ms_F, M0_Ms, M1_F, I_S0, I_S1},
+          {C1_Load_L1hit, C1_Load_L1hit_Stream}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({IF_E0S, F_S0, F_S1, ES_I, MO_I, MO_S0, MO_S1, Si_F0, Si_F1, S_M0,
-          O_M0, S0, S1, I_C, S0_C, S1_C, S_C},  C1_Load_L1miss) {} {
+          O_M0, S0, S1, I_C, S0_C, S1_C, S_C, I_S0, I_S1},
+          {C1_Load_L1miss, C1_Load_L1miss_Stream}) {} {
     zz_recycleMandatoryQueue;
   }
 
-  transition({F_S0, F_S1, MO_S0, MO_S1, Si_F0, Si_F1, S0, S1, S0_C, S1_C}, {Ifetch0_L1hit, Ifetch1_L1hit}) {} {
+  transition({F_S0, F_S1, MO_S0, MO_S1, Si_F0, Si_F1, S0, S1, S0_C, S1_C,
+          I_S0, I_S1}, {Ifetch0_L1hit, Ifetch1_L1hit}) {} {
     zz_recycleMandatoryQueue;
   }
 
@@ -1894,51 +2016,54 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
           IF_E0S, IF_E1S, IF_ES, IF0_ES, IF1_ES, ES_I, MO_I, S_F0, S_F1, S_F,
           O_F0, O_F1, O_F, S_M0, S_M1, O_M0, O_M1, Es_F0, Es_F1, Es_F, E0_F,
           E1_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F, M0_F, M0_Ms, M1_F, M1_Ms, I_C,
-          S_C}, {Ifetch0_L1miss, Ifetch1_L1miss}) {} {
+          S_C, I_S0, I_S1}, {Ifetch0_L1miss, Ifetch1_L1miss}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_E1S, IF_E1S, F_S0, F_S1, ES_I, MO_I, MO_S0, MO_S1, S_F1, O_F1,
           Si_F0, Si_F1, S_M1, O_M1, S0, S1, Es_F1, E1_F, E0_Es, Ms_F1, M0_Ms,
-          M1_F, I_C, S0_C, S1_C, S_C}, {C0_Store_L1miss}) {} {
+          M1_F, I_C, S0_C, S1_C, S_C, I_S0, I_S1}, {C0_Store_L1miss}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_E0S, IF_E0S, F_S0, F_S1, ES_I, MO_I, MO_S0, MO_S1 S_F0, O_F0,
           Si_F0, Si_F1, S_M0, O_M0, S0, S1, Es_F0, E0_F, E1_Es, Ms_F0, M0_F,
-          M1_Ms, I_C, S0_C, S1_C, S_C}, {C1_Store_L1miss}) {} {
+          M1_Ms, I_C, S0_C, S1_C, S_C, I_S0, I_S1}, {C1_Store_L1miss}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_M0, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E0S, I_ES, IF_E0S, IF_ES,
-          IF0_ES, IF1_ES, S_F0, S_F1, S_F, O_F0, O_F1, O_F, Si_F0, Si_F1, S_M0, O_M0, Es_F0, Es_F1, Es_F, E0_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F, M0_F, M0_Ms, M1_Ms}, {C0_Store_L1hit}) {} {
+          IF0_ES, IF1_ES, S_F0, S_F1, S_F, O_F0, O_F1, O_F, Si_F0, Si_F1, S_M0,
+          O_M0, Es_F0, Es_F1, Es_F, E0_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F,
+          M0_F, M0_Ms, M1_Ms, I_S0, I_S1}, {C0_Store_L1hit}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_M1, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E1S, I_ES, IF_E1S, IF_ES,
           IF0_ES, IF1_ES, S_F0, S_F1, S_F, O_F0, O_F1, O_F, Si_F0, Si_F1, S_M1,
           O_M1, Es_F0, Es_F1, Es_F, E1_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F,
-          M0_Ms, M1_F, M1_Ms}, {C1_Store_L1hit}) {} {
+          M0_Ms, M1_F, M1_Ms, I_S0, I_S1}, {C1_Store_L1hit}) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_M0, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E0S, I_ES, IF_E0S, IF_ES,
           IF0_ES, IF1_ES, S_F0, S_F, O_F0, O_F, S_M0, O_M0, Es_F0, Es_F, E0_F,
-          E1_Es, Ms_F0, Ms_F, M0_F, M1_Ms}, L1D0_Repl) {} {
+          E1_Es, Ms_F0, Ms_F, M0_F, M1_Ms, I_S0, I_S1}, L1D0_Repl) {} {
     zz_recycleMandatoryQueue;
   }
 
   transition({I_M1, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E1S, I_ES, IF_E1S, IF_ES,
           IF0_ES, IF1_ES, S_F1, S_F, O_F1, O_F, S_M1, O_M1, Es_F1, Es_F, E1_F,
-          E0_Es, Ms_F1, Ms_F, M0_Ms, M1_F}, L1D1_Repl) {} {
+          E0_Es, Ms_F1, Ms_F, M0_Ms, M1_F, I_S0, I_S1}, L1D1_Repl) {} {
     zz_recycleMandatoryQueue;
   }
 
-  transition({F_S0, F_S1, MO_S0, MO_S1, Si_F0, Si_F1, S0, S1, S0_C, S1_C}, L1I_Repl) {} {
+  transition({F_S0, F_S1, MO_S0, MO_S1, Si_F0, Si_F1, S0, S1, S0_C, S1_C,
+          I_S0, I_S1}, L1I_Repl) {} {
     zz_recycleMandatoryQueue;
   }
 
-  transition({S_C, S0_C, S1_C, S0, S1, Si_F0, Si_F1, I_M0, I_M1, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E0S, I_E1S, I_ES, S_F0, S_F1, S_F, O_F0, O_F1, O_F, S_M0, O_M0, S_M1, O_M1, Es_F0, Es_F1, Es_F, E0_F, E1_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F, M0_F, M0_Ms, M1_F, M1_Ms, MO_S0, MO_S1, IF_E0S, IF_E1S, IF_ES, IF0_ES, IF1_ES, F_S0, F_S1}, L2_Repl) {} {
+  transition({S_C, S0_C, S1_C, S0, S1, Si_F0, Si_F1, I_M0, I_M1, I_M0M1, I_M1M0, I_M0Ms, I_M1Ms, I_E0S, I_E1S, I_ES, S_F0, S_F1, S_F, O_F0, O_F1, O_F, S_M0, O_M0, S_M1, O_M1, Es_F0, Es_F1, Es_F, E0_F, E1_F, E0_Es, E1_Es, Ms_F0, Ms_F1, Ms_F, M0_F, M0_Ms, M1_F, M1_Ms, MO_S0, MO_S1, IF_E0S, IF_E1S, IF_ES, IF0_ES, IF1_ES, F_S0, F_S1, I_S0, I_S1}, L2_Repl) {} {
     zz_recycleMandatoryQueue;
   }
 
@@ -2987,6 +3112,103 @@ machine(MachineType:CorePair, "CP-like Core Coherence")
 
   transition({O_F0, O_F1, O_F}, PrbShrData) {L2DataArrayRead} {
     pd_sendProbeResponseData;
+    pp_popProbeQueue;
+  }
+
+  // LLC bypass streaming transitions
+
+  // L1 miss, streaming LLC bypass: issue RdBlk to memory, no L2 entry
+  transition(I, C0_Load_L1miss_Stream, I_S0) {L1D0TagArrayRead} {
+    l10m_profileMiss;
+    a0_allocateL1D;
+    ts_allocateTBEStreaming;
+    n_issueRdBlk;
+    p_popMandatoryQueue;
+  }
+
+  transition(I, C1_Load_L1miss_Stream, I_S1) {L1D1TagArrayRead} {
+    l11m_profileMiss;
+    a1_allocateL1D;
+    ts_allocateTBEStreaming;
+    n_issueRdBlk;
+    p_popMandatoryQueue;
+  }
+
+  // Memory response for streaming fill, cluster 0: write to L1 only
+  transition(I_S0, NB_AckE, I) {L1D0DataArrayWrite, L1D0TagArrayWrite} {
+    w0_writeDcacheL1Only;
+    xl0_loadDoneStream;
+    uu_sendUnblock;
+    d_deallocateTBE;
+    pr_popResponseQueue;
+  }
+
+  transition(I_S0, NB_AckS, I) {L1D0DataArrayWrite, L1D0TagArrayWrite} {
+    w0_writeDcacheL1Only;
+    xl0_loadDoneStream;
+    uu_sendUnblock;
+    d_deallocateTBE;
+    pr_popResponseQueue;
+  }
+
+  // Memory response for streaming fill, cluster 1: write to L1 only
+  transition(I_S1, NB_AckE, I) {L1D1DataArrayWrite, L1D1TagArrayWrite} {
+    w1_writeDcacheL1Only;
+    xl1_loadDoneStream;
+    uu_sendUnblock;
+    d_deallocateTBE;
+    pr_popResponseQueue;
+  }
+
+  transition(I_S1, NB_AckS, I) {L1D1DataArrayWrite, L1D1TagArrayWrite} {
+    w1_writeDcacheL1Only;
+    xl1_loadDoneStream;
+    uu_sendUnblock;
+    d_deallocateTBE;
+    pr_popResponseQueue;
+  }
+
+  // L1 hit, streaming LLC bypass: no L2 entry, serve from L1 directly
+  transition(I, C0_Load_L1hit_Stream) {L1D0TagArrayRead, L1D0DataArrayRead} {
+    l10h_profileHit;
+    l0_loadDoneFromL1Only;
+    mruD0_setD0cacheMRU;
+    p_popMandatoryQueue;
+  }
+
+  transition(I, C1_Load_L1hit_Stream) {L1D1TagArrayRead, L1D1DataArrayRead} {
+    l11h_profileHit;
+    l1_loadDoneFromL1Only;
+    mruD1_setD1cacheMRU;
+    p_popMandatoryQueue;
+  }
+
+  // L1 eviction for streaming line (state=I: L1 has line, L2 has no entry)
+  transition(I, L1D0_Repl) {L1D0TagArrayRead} {
+    i0_invCluster;
+  }
+
+  transition(I, L1D1_Repl) {L1D1TagArrayRead} {
+    i1_invCluster;
+  }
+
+  // Probe handling while streaming fill is pending
+  transition(I_S0, {PrbInv, PrbInvData}) {} {
+    pi_sendProbeResponseInv;
+    ib_invBothClusters;
+    a0_allocateL1D;
+    pp_popProbeQueue;
+  }
+
+  transition(I_S1, {PrbInv, PrbInvData}) {} {
+    pi_sendProbeResponseInv;
+    ib_invBothClusters;
+    a1_allocateL1D;
+    pp_popProbeQueue;
+  }
+
+  transition({I_S0, I_S1}, PrbShrData) {} {
+    pb_sendProbeResponseBackprobe;
     pp_popProbeQueue;
   }
 

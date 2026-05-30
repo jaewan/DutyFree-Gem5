@@ -97,6 +97,7 @@ class CPCntrl(MOESI_AMD_4th_PF_CorePair_Controller, CntrlBase):
 
         self.mandatory_queue_latency = 2
         self.l2_hit_latency = options.l2_latency
+        self.llc_streaming_bypass = options.llc_streaming_bypass
         self.issue_latency = options.cpu_to_dir_latency
         self.send_evictions = send_evicts(options)
         self.ruby_system = ruby_system
@@ -140,6 +141,13 @@ def define_options(parser):
     parser.add_argument("--l2-latency", type=int, default=9)
     parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")
+    parser.add_argument(
+        "--llc-streaming-bypass",
+        action="store_true",
+        default=False,
+        dest="llc_streaming_bypass",
+        help="STREAMING lines bypass L2 (LLC): L1D <-> Memory only",
+    )
     # Override common cache defaults to match AMD Zen 4c
     parser.set_defaults(
         l1d_size="32KiB",

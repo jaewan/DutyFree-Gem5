@@ -290,7 +290,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   bool isCCXSharer(Addr address) {
-    assert(ProbeFilterMemory.isTagPresent(address));
+    if (!ProbeFilterMemory.isTagPresent(address)) {
+      return false;
+    }
     CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(address));
     return entry.Sharers.count() > 0;
   }
@@ -377,7 +379,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
       peek(requestNetwork_in, CPURequestMsg) {
         TBE tbe := TBEs.lookup(in_msg.addr);
         CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(in_msg.addr));
-        if (inclusiveDir && isNotPresentProbeFilter(in_msg.addr)) {
+        if (inclusiveDir && !in_msg.isStreaming && isNotPresentProbeFilter(in_msg.addr)) {
             Addr victim := ProbeFilterMemory.cacheProbe(in_msg.addr);
             tbe := TBEs.lookup(victim);
             entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(victim));
@@ -693,7 +695,9 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   action(sm_setMRU, "sm", desc="set probe filter entry as MRU") {
-    ProbeFilterMemory.setMRU(address);
+    if (ProbeFilterMemory.isTagPresent(address)) {
+      ProbeFilterMemory.setMRU(address);
+    }
   }
 
   action(d_writeDataToMemory, "d", desc="Write data to memory") {
@@ -874,14 +878,18 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   }
 
   action(apf_allocateProbeFilterEntry, "apf", desc="Allocate probe filte entry") {
-    if (!ProbeFilterMemory.isTagPresent(address)) {
-        assert(ProbeFilterMemory.cacheAvail(address));
-        CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.allocate(address, new CacheEntry));
-        APPEND_TRANSITION_COMMENT(" allocating a new probe filter entry");
-        entry.pfState := ProbeFilterState:T;
-        entry.Sharers.clear();
-        entry.DirtyOwner := machineID;
-        entry.isShared := false;
+    peek(requestNetwork_in, CPURequestMsg) {
+      if (!in_msg.isStreaming) {
+        if (!ProbeFilterMemory.isTagPresent(address)) {
+            assert(ProbeFilterMemory.cacheAvail(address));
+            CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.allocate(address, new CacheEntry));
+            APPEND_TRANSITION_COMMENT(" allocating a new probe filter entry");
+            entry.pfState := ProbeFilterState:T;
+            entry.Sharers.clear();
+            entry.DirtyOwner := machineID;
+            entry.isShared := false;
+        }
+      }
     }
   }
 
