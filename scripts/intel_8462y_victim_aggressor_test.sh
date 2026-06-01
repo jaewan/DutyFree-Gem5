@@ -29,12 +29,14 @@ mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax
 CHI_COMMON="/home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py
     --ruby --topology=Pt2Pt
     --num-l3caches=8 --num-dirs=1
-    --cpu-type=TimingSimpleCPU --num-cpus=8
+    --cpu-type=TimingSimpleCPU --num-cpus=8 --cpu-clock=2.8GHz
     --l1d_size=48KiB --l1d_assoc=12
     --l1i_size=32KiB --l1i_assoc=8
     --l2_size=2MiB   --l2_assoc=16
     --l3_size=2MiB   --l3_assoc=16
-    --mem-type=SimpleMemory --dram-latency=107ns"
+    --mem-type=SimpleMemory
+    --mem-size=2GiB --cxl-mem-size=1GiB
+    --dram-latency=107ns --cxl-latency=214ns"
 
 ROOT=/home/naivete/DutyFree-Gem5-pakeunji
 
@@ -70,71 +72,123 @@ run_baseline() {
     local victim_n="$2"
     local victim_iters="$3"
     local tag="$4"
-    local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
-    local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
+    local outdir="$ROOT/logs/intel_dirtax/${tag}_m5out"
+    local logfile="$ROOT/logs/intel_dirtax/${tag}.log"
     local D="$ROOT/testcase/dirtax/dummy"
 
     echo "=== ${label} (baseline, no aggressors) ==="
     /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
-        /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
-        --ruby --topology=Pt2Pt \
-        --num-l3caches=8 --num-dirs=1 \
-        --cpu-type=TimingSimpleCPU --num-cpus=8 \
-        --l1d_size=48KiB --l1d_assoc=12 \
-        --l1i_size=32KiB --l1i_assoc=8 \
-        --l2_size=2MiB   --l2_assoc=16 \
-        --l3_size=2MiB   --l3_assoc=16 \
+        ${CHI_COMMON} \
         -c "$ROOT/testcase/dirtax/victim;$D;$D;$D;$D;$D;$D;$D" \
         -o "${victim_n} ${victim_iters};;;;;;;;" \
         > "${logfile}" 2>&1 &
     echo "  started: ${tag} [PID $!]"
 }
 
-ITERS=65536
+# nagg aggressors (1-7): CPU0=victim, CPU1..nagg=aggressor, rest=dummy
+run_nagg() {
+    local nagg="$1"
+    local victim_n="$2"
+    local victim_iters="$3"
+    local ws_tag="$4"
+    local V="$ROOT/testcase/dirtax/victim"
+    local A="$ROOT/testcase/dirtax/aggressor"
+    local D="$ROOT/testcase/dirtax/dummy"
+    local outdir="$ROOT/logs/intel_dirtax/nagg${nagg}/${ws_tag}_m5out"
+    local logfile="$ROOT/logs/intel_dirtax/nagg${nagg}/${ws_tag}.log"
 
-echo "===== Intel 8462Y+-like LLC fit ratio experiment ====="
-echo "  LLC: 8 HNFs × 2MiB = 16MiB total"
-echo "  Aggressors: 3 × 8MB sequential (24MB > LLC)"
-echo ""
+    local progs="$V"
+    local opts="${victim_n} ${victim_iters}"
+    for ((i=1; i<=nagg; i++));    do progs="$progs;$A"; opts="$opts;${AGG_OPTS}"; done
+    for ((i=nagg+1; i<=7; i++)); do progs="$progs;$D"; opts="$opts;"; done
 
-# --- Baselines (alone) ---
-run_baseline "WS=512KB  alone"  512   ${ITERS} "alone_512k"
-run_baseline "WS=4MB    alone"  4096  ${ITERS} "alone_4m"
-run_baseline "WS=8MB    alone"  8192  ${ITERS} "alone_8m"
-run_baseline "WS=16MB   alone"  16384 ${ITERS} "alone_16m"
-run_baseline "WS=24MB   alone"  24576 ${ITERS} "alone_24m"
-
-# --- With aggressors ---
-run_case "WS=512KB  + aggressors (fit_ratio≈0)"    512   ${ITERS} "with_512k"
-run_case "WS=4MB    + aggressors (fit_ratio≈0.25)"  4096  ${ITERS} "with_4m"
-run_case "WS=8MB    + aggressors (fit_ratio≈0.50)"  8192  ${ITERS} "with_8m"
-run_case "WS=16MB   + aggressors (fit_ratio≈1.0)"   16384 ${ITERS} "with_16m"
-run_case "WS=24MB   + aggressors (fit_ratio>1)"     24576 ${ITERS} "with_24m"
-
-# --- Summary ---
-echo "===== Summary: victim CPI slowdown by LLC fit ratio ====="
-printf "%-10s  %-12s  %-12s  %-10s  %s\n" "WS" "CPI(alone)" "CPI(w/agg)" "slowdown" "fit_ratio"
-
-summarize() {
-    local ws="$1" tag_a="$2" tag_w="$3" fit="$4"
-    cyc_a=$(grep "system\.cpu0\.numCycles" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_a}_m5out/stats.txt | awk '{print $2}')
-    cyc_w=$(grep "system\.cpu0\.numCycles" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_w}_m5out/stats.txt | awk '{print $2}')
-    cpi_a=$(grep "system\.cpu0\.cpi" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_a}_m5out/stats.txt | head -1 | awk '{print $2}')
-    cpi_w=$(grep "system\.cpu0\.cpi" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_w}_m5out/stats.txt | head -1 | awk '{print $2}')
-    if [ -n "$cyc_a" ] && [ -n "$cyc_w" ]; then
-        slowdown=$(awk "BEGIN {printf \"%.3f\", ${cyc_w}/${cyc_a}}")
-    else
-        slowdown="n/a"
-    fi
-    printf "%-10s  %-12s  %-12s  %-10s  %s\n" "${ws}" "${cpi_a}" "${cpi_w}" "${slowdown}x" "${fit}"
+    mkdir -p "$ROOT/logs/intel_dirtax/nagg${nagg}"
+    /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
+        ${CHI_COMMON} \
+        -c "${progs}" \
+        -o "${opts}" \
+        > "${logfile}" 2>&1 &
+    echo "  started: nagg${nagg}/${ws_tag} [PID $!]"
 }
 
-wait
-echo "All jobs done."
-echo ""
+ITERS=3145728
 
-summarize "512KB"  "alone_512k"  "with_512k"  "≈0"
-summarize "4MB"    "alone_4m"    "with_4m"    "≈0.25"
-summarize "8MB"    "alone_8m"    "with_8m"    "≈0.50"
-summarize "16MB"   "alone_16m"   "with_16m"   "≈1.0"
-summarize "24MB"   "alone_24m"   "with_24m"   ">1.0"
+WS_TAGS=("512k:512:≈0%" "2m:2048:≈12.5%" "4m:4096:≈25%" "8m:8192:≈50%" "12m:12288:≈75%" "16m:16384:≈100%" "24m:24576:>100%")
+
+# ── 결과 출력 ────────────────────────────────────────────────────────────────
+print_results() {
+python3 - << 'PYEOF'
+from pathlib import Path
+
+BASE = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax")
+WS   = [("512k","≈0%"),("2m","≈12.5%"),("4m","≈25%"),
+        ("8m","≈50%"),("12m","≈75%"),("16m","≈100%"),("24m",">100%")]
+
+def ticks(p):
+    try:
+        for line in open(p/"stats.txt"):
+            if line.startswith("simTicks "):
+                return int(line.split()[1])
+    except: pass
+    return None
+
+def sv(c, b): return f"{c/b:.3f}" if c and b else ""
+
+T = "\t"
+# Header
+header = ["ws","fit_ratio","alone"] + [f"nagg{n}" for n in range(1,8)]
+print(T.join(header))
+
+for ws_tag, fit in WS:
+    alone = ticks(BASE / f"alone_{ws_tag}_m5out")
+    row = [ws_tag, fit, f"{alone}" if alone else ""]
+    for n in range(1, 8):
+        w = ticks(BASE / f"nagg{n}" / f"ws_{ws_tag}_m5out")
+        row.append(sv(w, alone))
+    print(T.join(row))
+PYEOF
+}
+
+# ── 실행 ─────────────────────────────────────────────────────────────────────
+run_all() {
+    local jobs=0 max_jobs=8
+
+    launch() {
+        "$@" &
+        jobs=$((jobs+1))
+        if [ $jobs -ge $max_jobs ]; then
+            wait -n 2>/dev/null || wait
+            jobs=$((jobs-1))
+        fi
+    }
+
+    echo "===== Intel 8462Y+-like LLC fit ratio experiment ====="
+    echo "  LLC: 8 HNFs × 2MiB = 16MiB total  |  max_jobs=${max_jobs}"
+    echo ""
+
+    # Baselines
+    for entry in "${WS_TAGS[@]}"; do
+        IFS=: read -r tag size fit <<< "$entry"
+        launch run_baseline "WS=${tag} alone" $size ${ITERS} "alone_${tag}"
+    done
+
+    # nagg sweep (nagg=1..7 × all WS)
+    for nagg in 1 2 3 4 5 6 7; do
+        for entry in "${WS_TAGS[@]}"; do
+            IFS=: read -r tag size fit <<< "$entry"
+            launch run_nagg $nagg $size ${ITERS} "ws_${tag}"
+        done
+    done
+
+    wait
+    echo "All jobs done."
+    echo ""
+    print_results
+}
+
+# ── main ─────────────────────────────────────────────────────────────────────
+case "${1:-all}" in
+    all)     run_all ;;
+    results) print_results ;;
+    *)       echo "Usage: $0 [all|results]"; exit 1 ;;
+esac
