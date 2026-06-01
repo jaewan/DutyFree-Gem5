@@ -16,15 +16,15 @@
 # pfbypass_llc: dirtax victim + dutyfree aggressor + --llc-streaming-bypass
 
 set -e
-cd "$(dirname "$0")"
 
-GEM5="build_amd_zen4_PF/gem5.opt"
-CFG="configs/deprecated/example/se.py"
+ROOT=/home/naivete/DutyFree-Gem5-pakeunji
+GEM5="$ROOT/build_amd_zen4_PF/gem5.opt"
+CFG="$ROOT/configs/deprecated/example/se.py"
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
   --l1d_size=256KiB --l1d_assoc=8 \
   --l1i_size=64KiB  --l1i_assoc=8 \
   --mem-type=SimpleMemory"
-LOGBASE="logs/main_cases"
+LOGBASE="$ROOT/logs/main_cases"
 
 # ── 케이스 정의 ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
@@ -70,19 +70,19 @@ run_case() {
         mkdir -p "${d}/victim_only" "${d}/diff_L3" "${d}/same_L3"
 
         $GEM5 --outdir="${d}/victim_only" $CFG $common $extra \
-            -c "testcase/${vbin}/victim;testcase/${dbin}/dummy;testcase/${dbin}/dummy;testcase/${dbin}/dummy" \
+            -c "$ROOT/testcase/${vbin}/victim;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/dummy" \
             --options "${v_kb} ${iters};;;" \
             > "${d}/victim_only.log" 2>&1 &
         echo "  started: ${variant}/victim_only [PID $!]"
 
         $GEM5 --outdir="${d}/diff_L3" $CFG $common $extra \
-            -c "testcase/${vbin}/victim;testcase/${dbin}/dummy;testcase/${dbin}/aggressor;testcase/${dbin}/dummy" \
+            -c "$ROOT/testcase/${vbin}/victim;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/aggressor;$ROOT/testcase/${dbin}/dummy" \
             --options "${v_kb} ${iters};;${agg_mb};" \
             > "${d}/diff_L3.log" 2>&1 &
         echo "  started: ${variant}/diff_L3   [PID $!]"
 
         $GEM5 --outdir="${d}/same_L3" $CFG $common $extra \
-            -c "testcase/${vbin}/victim;testcase/${dbin}/aggressor;testcase/${dbin}/dummy;testcase/${dbin}/dummy" \
+            -c "$ROOT/testcase/${vbin}/victim;$ROOT/testcase/${dbin}/aggressor;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/dummy" \
             --options "${v_kb} ${iters};${agg_mb};;" \
             > "${d}/same_L3.log" 2>&1 &
         echo "  started: ${variant}/same_L3   [PID $!]"
@@ -111,7 +111,7 @@ def sv(c, v):   return f"{c/v:.3f}" if c and v else ""
 def si(v):      return f"{int(v)}"  if v is not None else ""
 
 T = "\t"
-base = Path("logs/main_cases")
+base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/main_cases")
 CASES = {"A":"v3m_a16m_pf8m_a128_L2=4M","B":"v3m_a4m_pf8m_a128_L2=4M",
          "C":"v4m_a6m_pf8m_a8_L2=8M","D":"v3m_a16m_pf8m_a256_L2=4M",
          "E":"v3m_a16m_pf16m_a128_L2=4M"}
