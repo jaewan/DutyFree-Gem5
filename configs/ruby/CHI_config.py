@@ -610,12 +610,14 @@ class CHI_RNF(CHI_Node):
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
                 L1DCache(size=options.l1d_size, assoc=options.l1d_assoc),
                 options.cacheline_size,
+                l1Dprefetcher_type=StridePrefetcher,
             )
             for cpu in cpus
         ]
         for rnf in rnfs:
             rnf.addPrivL2Cache(
-                L2Cache(size=options.l2_size, assoc=options.l2_assoc)
+                L2Cache(size=options.l2_size, assoc=options.l2_assoc),
+                pf_type=StridePrefetcher,
             )
         return rnfs
 
