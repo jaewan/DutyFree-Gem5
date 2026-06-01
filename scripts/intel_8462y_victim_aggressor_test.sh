@@ -9,16 +9,16 @@
 #   LLC: 60MB total / 32 tiles = ~1.875MiB per CHA
 #   Here we use 8 HNF nodes × 2MiB = 16MiB total (scaled-down, preserves ratios)
 #
-# Victim working-set sweep (N = number of ints = WS/4):
-#   [1] WS = 512KB  (N=131072)  → fits in L2 (2MiB),   fit_ratio ≈ 0  → no tax expected
-#   [2] WS = 4MB    (N=1048576) → 25% of 16MB LLC,     fit_ratio ≈ 0.25
-#   [3] WS = 8MB    (N=2097152) → 50% of 16MB LLC,     fit_ratio ≈ 0.50
-#   [4] WS = 16MB   (N=4194304) → 100% of 16MB LLC,    fit_ratio ≈ 1.0
-#   [5] WS = 24MB   (N=6291456) → overflows 16MB LLC   fit_ratio > 1  → victim spills
+# Victim working-set sweep (argv[1] = size_kb):
+#   [1] WS = 512KB  → fits in L2 (2MiB),   fit_ratio ≈ 0  → no tax expected
+#   [2] WS = 4MB    → 25% of 16MB LLC,     fit_ratio ≈ 0.25
+#   [3] WS = 8MB    → 50% of 16MB LLC,     fit_ratio ≈ 0.50
+#   [4] WS = 16MB   → 100% of 16MB LLC,    fit_ratio ≈ 1.0
+#   [5] WS = 24MB   → overflows 16MB LLC   fit_ratio > 1  → victim spills
 #
-# Aggressor: 3 CPUs each scanning 8MB (N=2097152) sequentially.
+# Aggressor: 3 CPUs each scanning 8MB (argv[1] = size_mb) sequentially.
 #   3 × 8MB = 24MB > 16MB LLC → guaranteed LLC pressure
-#   PASSES=10 keeps simulation time manageable.
+#   Infinite loop — terminated by victim's gem5_exit.
 #
 # Layout (8 CPUs total):
 #   CPU0: victim   CPU1: dummy  CPU2: aggressor  CPU3: dummy
@@ -35,10 +35,12 @@ CHI_COMMON="/home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.p
     --l2_size=2MiB   --l2_assoc=16
     --l3_size=2MiB   --l3_assoc=16"
 
-# 8 binaries: victim dummy aggressor dummy aggressor dummy aggressor dummy
-PROGS="testcase/dirtax/victim;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy;testcase/dirtax/aggressor;testcase/dirtax/dummy"
+ROOT=/home/naivete/DutyFree-Gem5-pakeunji
 
-AGG_OPTS="2097152 10"   # 8MB, 10 passes
+# 8 binaries: victim dummy aggressor dummy aggressor dummy aggressor dummy
+PROGS="$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy"
+
+AGG_OPTS="8.0"   # 8MB sequential, infinite loop
 
 run_case() {
     local label="$1"
@@ -52,7 +54,7 @@ run_case() {
     local OPTS="${victim_n} ${victim_iters};;;${AGG_OPTS};;${AGG_OPTS};;${AGG_OPTS};"
 
     echo "=== ${label} ==="
-    echo "  victim N=${victim_n} ITERS=${victim_iters}"
+    echo "  victim size_kb=${victim_n} ITERS=${victim_iters}"
     /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
         ${CHI_COMMON} \
         -c "${PROGS}" \
@@ -85,7 +87,7 @@ run_baseline() {
         --l1i_size=32KiB --l1i_assoc=8 \
         --l2_size=2MiB   --l2_assoc=16 \
         --l3_size=2MiB   --l3_assoc=16 \
-        -c "testcase/dirtax/victim;testcase/dirtax/dummy" \
+        -c "$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/dummy" \
         -o "${victim_n} ${victim_iters};" \
         > "${logfile}" 2>&1
 
@@ -102,18 +104,18 @@ echo "  Aggressors: 3 × 8MB sequential (24MB > LLC)"
 echo ""
 
 # --- Baselines (alone) ---
-run_baseline "WS=512KB  alone" 131072  ${ITERS} "alone_512k"
-run_baseline "WS=4MB    alone" 1048576 ${ITERS} "alone_4m"
-run_baseline "WS=8MB    alone" 2097152 ${ITERS} "alone_8m"
-run_baseline "WS=16MB   alone" 4194304 ${ITERS} "alone_16m"
-run_baseline "WS=24MB   alone" 6291456 ${ITERS} "alone_24m"
+run_baseline "WS=512KB  alone"  512   ${ITERS} "alone_512k"
+run_baseline "WS=4MB    alone"  4096  ${ITERS} "alone_4m"
+run_baseline "WS=8MB    alone"  8192  ${ITERS} "alone_8m"
+run_baseline "WS=16MB   alone"  16384 ${ITERS} "alone_16m"
+run_baseline "WS=24MB   alone"  24576 ${ITERS} "alone_24m"
 
 # --- With aggressors ---
-run_case "WS=512KB  + aggressors (fit_ratio≈0)"   131072  ${ITERS} "with_512k"
-run_case "WS=4MB    + aggressors (fit_ratio≈0.25)" 1048576 ${ITERS} "with_4m"
-run_case "WS=8MB    + aggressors (fit_ratio≈0.50)" 2097152 ${ITERS} "with_8m"
-run_case "WS=16MB   + aggressors (fit_ratio≈1.0)"  4194304 ${ITERS} "with_16m"
-run_case "WS=24MB   + aggressors (fit_ratio>1)"    6291456 ${ITERS} "with_24m"
+run_case "WS=512KB  + aggressors (fit_ratio≈0)"    512   ${ITERS} "with_512k"
+run_case "WS=4MB    + aggressors (fit_ratio≈0.25)"  4096  ${ITERS} "with_4m"
+run_case "WS=8MB    + aggressors (fit_ratio≈0.50)"  8192  ${ITERS} "with_8m"
+run_case "WS=16MB   + aggressors (fit_ratio≈1.0)"   16384 ${ITERS} "with_16m"
+run_case "WS=24MB   + aggressors (fit_ratio>1)"     24576 ${ITERS} "with_24m"
 
 # --- Summary ---
 echo "===== Summary: victim CPI slowdown by LLC fit ratio ====="
