@@ -12,33 +12,33 @@
 #   Private: HNF sends snoops only to the owning RNF → low snoop count per CPU
 #   Shared:  HNF must snoop all sharers → high snoop count per CPU
 
-mkdir -p logs/intel_probe
+mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe
 
 echo "=== Launching CHI probe tests in parallel ==="
 
 # ── Section 1: Private ────────────────────────────────────────────────────────
-build_X86_CHI/gem5.opt --outdir=logs/intel_probe/private_m5out \
-    configs/deprecated/example/se.py \
+/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out \
+    /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=4 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 \
     --l2_size=512KiB --l2_assoc=8 --l3_size=16MiB --l3_assoc=16 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8" \
-    > logs/intel_probe/private.log 2>&1 &
-echo "  started: private  (log: logs/intel_probe/private.log)"
+    > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private.log 2>&1 &
+echo "  started: private  (log: /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private.log)"
 
 # ── Section 2: Shared ─────────────────────────────────────────────────────────
-build_X86_CHI/gem5.opt --outdir=logs/intel_probe/shared_m5out \
-    configs/deprecated/example/se.py \
+/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out \
+    /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=4 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 \
     --l2_size=512KiB --l2_assoc=8 --l3_size=16MiB --l3_assoc=16 \
-    -c testcase/latency/shared_bench \
+    -c /home/naivete/DutyFree-Gem5-pakeunji/testcase/latency/shared_bench \
     -o "262144 324011 4096 4" \
-    > logs/intel_probe/shared.log 2>&1 &
-echo "  started: shared  (log: logs/intel_probe/shared.log)"
+    > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared.log 2>&1 &
+echo "  started: shared  (log: /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared.log)"
 
 echo ""
 echo "Waiting for both to finish..."
@@ -46,23 +46,23 @@ wait
 
 echo ""
 echo "=== [Private] 4 independent workloads (one per CPU) ==="
-grep "Exiting @ tick" logs/intel_probe/private.log || true
+grep "Exiting @ tick" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private.log || true
 echo "--- CHI Snoop Counts (Private) ---"
-grep "system\.ruby\.hnf\.cntrl\.snpOut\.m_msg_count" logs/intel_probe/private_m5out/stats.txt | awk '{print "HNF snpOut:          ", $2}' || echo "HNF snpOut:           0"
-grep "system\.cpu0\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU0 l1d snpIn:      ", $2}'
-grep "system\.cpu1\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU1 l1d snpIn:      ", $2}'
-grep "system\.cpu2\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU2 l1d snpIn:      ", $2}'
-grep "system\.cpu3\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU3 l1d snpIn:      ", $2}'
+grep "system\.ruby\.hnf\.cntrl\.snpOut\.m_msg_count" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out/stats.txt | awk '{print "HNF snpOut:          ", $2}' || echo "HNF snpOut:           0"
+grep "system\.cpu0\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU0 l1d snpIn:      ", $2}'
+grep "system\.cpu1\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU1 l1d snpIn:      ", $2}'
+grep "system\.cpu2\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU2 l1d snpIn:      ", $2}'
+grep "system\.cpu3\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/private_m5out/stats.txt | awk '{print "CPU3 l1d snpIn:      ", $2}'
 
 echo ""
 echo "=== [Shared] 4 threads sharing the same array ==="
-grep "Exiting @ tick" logs/intel_probe/shared.log || true
+grep "Exiting @ tick" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared.log || true
 echo "--- CHI Snoop Counts (Shared) ---"
-grep "system\.ruby\.hnf\.cntrl\.snpOut\.m_msg_count" logs/intel_probe/shared_m5out/stats.txt | awk '{print "HNF snpOut:          ", $2}' || echo "HNF snpOut:           0"
-grep "system\.cpu0\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU0 l1d snpIn:      ", $2}'
-grep "system\.cpu1\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU1 l1d snpIn:      ", $2}'
-grep "system\.cpu2\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU2 l1d snpIn:      ", $2}'
-grep "system\.cpu3\.l1d\.snpIn\.m_msg_count"  logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU3 l1d snpIn:      ", $2}'
+grep "system\.ruby\.hnf\.cntrl\.snpOut\.m_msg_count" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out/stats.txt | awk '{print "HNF snpOut:          ", $2}' || echo "HNF snpOut:           0"
+grep "system\.cpu0\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU0 l1d snpIn:      ", $2}'
+grep "system\.cpu1\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU1 l1d snpIn:      ", $2}'
+grep "system\.cpu2\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU2 l1d snpIn:      ", $2}'
+grep "system\.cpu3\.l1d\.snpIn\.m_msg_count"  /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_probe/shared_m5out/stats.txt | awk '{print "CPU3 l1d snpIn:      ", $2}'
 
 echo ""
 echo "# 예상:"

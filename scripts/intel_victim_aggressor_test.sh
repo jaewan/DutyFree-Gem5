@@ -24,9 +24,9 @@
 #   CPU0: victim   CPU1: dummy  CPU2: aggressor  CPU3: dummy
 #   CPU4: aggressor CPU5: dummy  CPU6: aggressor  CPU7: dummy
 
-mkdir -p logs/intel_dirtax
+mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax
 
-CHI_COMMON="configs/deprecated/example/se.py
+CHI_COMMON="/home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py
     --ruby --topology=Pt2Pt
     --num-l3caches=8 --num-dirs=1
     --cpu-type=TimingSimpleCPU --num-cpus=8
@@ -45,15 +45,15 @@ run_case() {
     local victim_n="$2"
     local victim_iters="$3"
     local tag="$4"
-    local outdir="logs/intel_dirtax/${tag}_m5out"
-    local logfile="logs/intel_dirtax/${tag}.log"
+    local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
+    local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
 
     # victim opts;dummy;;aggressor opts;;aggressor opts;;aggressor opts;
     local OPTS="${victim_n} ${victim_iters};;;${AGG_OPTS};;${AGG_OPTS};;${AGG_OPTS};"
 
     echo "=== ${label} ==="
     echo "  victim N=${victim_n} ITERS=${victim_iters}"
-    build_X86_CHI/gem5.opt --outdir="${outdir}" \
+    /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
         ${CHI_COMMON} \
         -c "${PROGS}" \
         -o "${OPTS}" \
@@ -72,12 +72,12 @@ run_baseline() {
     local victim_n="$2"
     local victim_iters="$3"
     local tag="$4"
-    local outdir="logs/intel_dirtax/${tag}_m5out"
-    local logfile="logs/intel_dirtax/${tag}.log"
+    local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
+    local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
 
     echo "=== ${label} (baseline, no aggressors) ==="
-    build_X86_CHI/gem5.opt --outdir="${outdir}" \
-        configs/deprecated/example/se.py \
+    /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
+        /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
         --ruby --topology=Pt2Pt \
         --num-l3caches=8 --num-dirs=1 \
         --cpu-type=TimingSimpleCPU --num-cpus=2 \
@@ -121,10 +121,10 @@ printf "%-10s  %-12s  %-12s  %-10s  %s\n" "WS" "CPI(alone)" "CPI(w/agg)" "slowdo
 
 summarize() {
     local ws="$1" tag_a="$2" tag_w="$3" fit="$4"
-    cyc_a=$(grep "system\.cpu0\.numCycles" logs/intel_dirtax/${tag_a}_m5out/stats.txt | awk '{print $2}')
-    cyc_w=$(grep "system\.cpu0\.numCycles" logs/intel_dirtax/${tag_w}_m5out/stats.txt | awk '{print $2}')
-    cpi_a=$(grep "system\.cpu0\.cpi" logs/intel_dirtax/${tag_a}_m5out/stats.txt | head -1 | awk '{print $2}')
-    cpi_w=$(grep "system\.cpu0\.cpi" logs/intel_dirtax/${tag_w}_m5out/stats.txt | head -1 | awk '{print $2}')
+    cyc_a=$(grep "system\.cpu0\.numCycles" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_a}_m5out/stats.txt | awk '{print $2}')
+    cyc_w=$(grep "system\.cpu0\.numCycles" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_w}_m5out/stats.txt | awk '{print $2}')
+    cpi_a=$(grep "system\.cpu0\.cpi" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_a}_m5out/stats.txt | head -1 | awk '{print $2}')
+    cpi_w=$(grep "system\.cpu0\.cpi" /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag_w}_m5out/stats.txt | head -1 | awk '{print $2}')
     if [ -n "$cyc_a" ] && [ -n "$cyc_w" ]; then
         slowdown=$(awk "BEGIN {printf \"%.3f\", ${cyc_w}/${cyc_a}}")
     else
