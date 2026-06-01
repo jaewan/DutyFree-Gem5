@@ -41,9 +41,13 @@ typings
 # testcase build artifacts
 testcase/coherence/coherence_tests
 testcase/latency/latency_bench
+testcase/latency/shared_bench
 testcase/dirtax/victim
 testcase/dirtax/aggressor
 testcase/dirtax/dummy
+testcase/dutyfree/victim
+testcase/dutyfree/aggressor
+testcase/dutyfree/dummy
 .DS_Store
 
 완벽해요! ✅
