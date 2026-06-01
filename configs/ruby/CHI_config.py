@@ -70,7 +70,8 @@ class L1DCache(RubyCache):
 
 
 class L2Cache(RubyCache):
-    dataAccessLatency = 6
+    # 16 cy @ SPR 2.8GHz ≈ 5.7ns → 11 cy @ Ruby 2GHz
+    dataAccessLatency = 9
     tagAccessLatency = 2
 
 
@@ -338,10 +339,12 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DMT = True
         self.enable_DCT = True
         self.send_evictions = False
-        # MOESI / Mostly inclusive for shared / Exclusive for unique
+        # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
+        # alloc_on_readonce=True kept so streaming reads still fill LLC
+        # (required for Directory Tax baseline experiment).
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False
-        self.alloc_on_readshared = True
+        self.alloc_on_readshared = False
         self.alloc_on_readunique = False
         self.alloc_on_readonce = True
         self.alloc_on_writeback = True

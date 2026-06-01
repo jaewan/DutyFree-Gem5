@@ -33,12 +33,13 @@ CHI_COMMON="/home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.p
     --l1d_size=48KiB --l1d_assoc=12
     --l1i_size=32KiB --l1i_assoc=8
     --l2_size=2MiB   --l2_assoc=16
-    --l3_size=2MiB   --l3_assoc=16"
+    --l3_size=2MiB   --l3_assoc=16
+    --mem-type=SimpleMemory --dram-latency=107ns"
 
 ROOT=/home/naivete/DutyFree-Gem5-pakeunji
 
-# 8 binaries: victim dummy aggressor dummy aggressor dummy aggressor dummy
-PROGS="$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/dummy"
+# 8 CPUs: CPU0=victim, CPU1-7=aggressor (no dummy)
+PROGS="$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor;$ROOT/testcase/dirtax/aggressor"
 
 AGG_OPTS="8.0"   # 8MB sequential, infinite loop
 
@@ -50,8 +51,8 @@ run_case() {
     local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
     local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
 
-    # victim opts;dummy;;aggressor opts;;aggressor opts;;aggressor opts;
-    local OPTS="${victim_n} ${victim_iters};;;${AGG_OPTS};;${AGG_OPTS};;${AGG_OPTS};"
+    # victim;aggressor×7
+    local OPTS="${victim_n} ${victim_iters};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS}"
 
     echo "=== ${label} ==="
     echo "  victim size_kb=${victim_n} ITERS=${victim_iters}"
@@ -59,16 +60,11 @@ run_case() {
         ${CHI_COMMON} \
         -c "${PROGS}" \
         -o "${OPTS}" \
-        > "${logfile}" 2>&1
-
-    echo "  $(grep 'Exiting @ tick' ${logfile} | tail -1)"
-    echo "--- victim (CPU0) stats ---"
-    grep "system\.cpu0\.numCycles" "${outdir}/stats.txt"     | awk '{printf "  numCycles: %s\n", $2}'
-    grep "system\.cpu0\.cpi"       "${outdir}/stats.txt"     | head -1 | awk '{printf "  CPI:       %s\n", $2}'
-    echo ""
+        > "${logfile}" 2>&1 &
+    echo "  started: ${tag} [PID $!]"
 }
 
-# Baseline: victim alone (2 CPUs)
+# Baseline: victim alone (CPU0=victim, CPU1-7=dummy)
 run_baseline() {
     local label="$1"
     local victim_n="$2"
@@ -76,24 +72,22 @@ run_baseline() {
     local tag="$4"
     local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
     local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
+    local D="$ROOT/testcase/dirtax/dummy"
 
     echo "=== ${label} (baseline, no aggressors) ==="
     /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
         /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
         --ruby --topology=Pt2Pt \
         --num-l3caches=8 --num-dirs=1 \
-        --cpu-type=TimingSimpleCPU --num-cpus=2 \
+        --cpu-type=TimingSimpleCPU --num-cpus=8 \
         --l1d_size=48KiB --l1d_assoc=12 \
         --l1i_size=32KiB --l1i_assoc=8 \
         --l2_size=2MiB   --l2_assoc=16 \
         --l3_size=2MiB   --l3_assoc=16 \
-        -c "$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/dummy" \
-        -o "${victim_n} ${victim_iters};" \
-        > "${logfile}" 2>&1
-
-    echo "  $(grep 'Exiting @ tick' ${logfile} | tail -1)"
-    grep "system\.cpu0\.numCycles" "${outdir}/stats.txt" | awk '{printf "  numCycles (alone): %s\n", $2}'
-    echo ""
+        -c "$ROOT/testcase/dirtax/victim;$D;$D;$D;$D;$D;$D;$D" \
+        -o "${victim_n} ${victim_iters};;;;;;;;" \
+        > "${logfile}" 2>&1 &
+    echo "  started: ${tag} [PID $!]"
 }
 
 ITERS=65536
@@ -134,6 +128,10 @@ summarize() {
     fi
     printf "%-10s  %-12s  %-12s  %-10s  %s\n" "${ws}" "${cpi_a}" "${cpi_w}" "${slowdown}x" "${fit}"
 }
+
+wait
+echo "All jobs done."
+echo ""
 
 summarize "512KB"  "alone_512k"  "with_512k"  "≈0"
 summarize "4MB"    "alone_4m"    "with_4m"    "≈0.25"

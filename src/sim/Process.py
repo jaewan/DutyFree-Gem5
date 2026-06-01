@@ -58,6 +58,10 @@ class Process(SimObject):
         "requires this. Disable at your own risk.",
     )
 
+    mem_pool_id = Param.Int(
+        0, "physical memory pool for page allocation (0=DRAM, 1=CXL)"
+    )
+
     uid = Param.Int(100, "user id")
     euid = Param.Int(100, "effective user id")
     gid = Param.Int(100, "group id")

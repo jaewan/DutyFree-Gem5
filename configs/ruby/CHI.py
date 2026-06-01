@@ -50,6 +50,28 @@ def define_options(parser):
         "Required for CustomMesh topology",
     )
     parser.add_argument("--enable-dvm", default=False, action="store_true")
+    parser.add_argument(
+        "--cxl-mem-size",
+        type=str,
+        default="0",
+        dest="cxl_mem_size",
+        help="Size of CXL memory range above DRAM (0=disabled). "
+        "Processes with mem_pool_id=1 allocate from this range.",
+    )
+    parser.add_argument(
+        "--dram-latency",
+        type=str,
+        default="75ns",
+        dest="dram_latency",
+        help="SimpleMemory latency for the DRAM range (pool 0)",
+    )
+    parser.add_argument(
+        "--cxl-latency",
+        type=str,
+        default="200ns",
+        dest="cxl_latency",
+        help="SimpleMemory latency for the CXL range (pool 1)",
+    )
 
 
 def read_config_file(file):
@@ -103,7 +125,8 @@ def create_system(
     CHI_RNI_IO = chi_defs.CHI_RNI_IO
 
     class HNFCache(RubyCache):
-        dataAccessLatency = 10
+        # SPR L3 ~33ns → 66 cy @ Ruby 2GHz
+        dataAccessLatency = 64
         tagAccessLatency = 2
         size = options.l3_size
         assoc = options.l3_assoc
@@ -253,5 +276,19 @@ def create_system(
         topology = create_topology(network_cntrls, options)
     else:
         m5.fatal(f"{options.topology} not supported!")
+
+    # Split mem_ranges into [DRAM, CXL] when --cxl-mem-size is given.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+        from m5.util.convert import toMemorySize
+
+        cxl_bytes = int(toMemorySize(cxl_size_str))
+        total_bytes = system.mem_ranges[0].size()
+        dram_bytes = total_bytes - cxl_bytes
+        assert dram_bytes > 0, "cxl-mem-size >= mem-size"
+        system.mem_ranges = [
+            m5.objects.AddrRange(0, size=dram_bytes),
+            m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
+        ]
 
     return (cpu_sequencers, mem_cntrls, topology)

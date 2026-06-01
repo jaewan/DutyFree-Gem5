@@ -268,6 +268,17 @@ if args.ruby:
     Ruby.create_system(args, False, system)
     assert args.num_cpus == len(system.ruby._cpu_ports)
 
+    # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
+    # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
+    if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
+        for i in range(np):
+            pool_id = 0 if i == 0 else 1
+            workload = system.cpu[i].workload
+            if not isinstance(workload, list):
+                workload = [workload]
+            for proc in workload:
+                proc.mem_pool_id = pool_id
+
     system.ruby.clk_domain = SrcClockDomain(
         clock=args.ruby_clock, voltage_domain=system.voltage_domain
     )

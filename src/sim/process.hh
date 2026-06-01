@@ -294,6 +294,9 @@ class Process : public SimObject
     // Emulated drivers available to this process
     std::vector<EmulatedDriver *> drivers;
 
+    // Physical memory pool id: 0=DRAM, 1=CXL
+    int _memPoolId;
+
     std::shared_ptr<FDArray> fds;
 
     bool *exitGroup;
