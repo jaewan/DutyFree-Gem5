@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
-# main_cases.sh — 주요 케이스 재현 스크립트
+# test_cxl_zen4c_tuned.sh — Zen 4c latency 최대한 반영한 CXL 실험
 #
-# ── PF tax + LLC contention (main cases) ──────────────────────────────────
-# Case A: v3m_a16m_pf8m/a128_L2=4M  (dirtax_v7/3MiB)          diff=2.272 same=3.772
-# Case B: v4m_a16m_pf8m/a128_L2=4M  (dirtax_v7/4MiB)          diff=3.390 same=5.368
-# Case C: v3m_a16m_pf8m/a256_L2=4M  (main/v3m_a16m_pf8m_a256) diff=1.977 same=3.298
-# Case D: v3m_a16m_pf16m/a128_L2=4M (main/v3m_a16m_pf16m_a128) diff=1.304 same=2.716
+# 가정: victim(CPU0) → DRAM 75ns (pool 0)
+#       aggressor(CPU1-3) → CXL 200ns (pool 1)
 #
-# ── Oracle PF (LLC contention only, reference) ────────────────────────────
-# Case E: v3m_a4m_pf8m/a128_L2=4M   (v8/v3MiB/pf8MiB/agg4MiB) diff=1.000 same=3.075
-# Case F: v3m_a16m_pf32m/a128_L2=4M (main/v3m_a16m_pf32m_a128) diff=1.000 same=2.601
+# Zen 4c 매핑:
+#   gem5 L1 (256KiB)  = Zen 4c L1(32KB) + L2(1MB) 통합 private
+#   gem5 L2 (4MiB)    = Zen 4c L3 shared CCX
 #
-# Usage: ./main_cases.sh [all|A|B|C|D|E|F]   default=all
+# 조정값 (vs 기본):
+#   --cpu-clock=3.1GHz   (Zen 4c 실제 클럭)
+#   --l2-latency=40      (L3 ~40ns at 1GHz sys-clock, 기본값 9)
+#   DRAM=75ns, CXL=200ns (실제 하드웨어 그대로)
 #
-# pfbypass_llc: dirtax victim + dutyfree aggressor + --llc-streaming-bypass
+# Usage: ./test_cxl_zen4c_tuned.sh [all|A|B|C|D|E|F|G|results]
 
 set -e
 
 ROOT=/home/naivete/DutyFree-Gem5-pakeunji
-GEM5="$ROOT/build_amd_zen4_PF/gem5.opt"
+GEM5="$ROOT/build_amd_zen4_PF_CXL_latency/gem5.opt"
 CFG="$ROOT/configs/deprecated/example/se.py"
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
+  --cpu-clock=3.1GHz \
   --l1d_size=256KiB --l1d_assoc=8 \
   --l1i_size=64KiB  --l1i_assoc=8 \
-  --mem-type=SimpleMemory"
-LOGBASE="$ROOT/logs/main_cases"
+  --mem-type=SimpleMemory \
+  --mem-size=2GiB --cxl-mem-size=1GiB \
+  --dram-latency=75ns --cxl-latency=200ns"
+LOGBASE="$ROOT/logs/cxl_latency_zen4c_tuned"
 
 # ── 케이스 정의 ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
@@ -34,10 +37,12 @@ declare -A CASE_COMMON=(
   [D]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=16MiB --pf-assoc=128"
   [E]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=8MiB  --pf-assoc=128"
   [F]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=32MiB --pf-assoc=128"
+  [G]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=32MiB --pf-assoc=128"
+  [H]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=16MiB --pf-assoc=128"
 )
-declare -A CASE_VKB=([A]=3072 [B]=4096 [C]=3072 [D]=3072 [E]=3072 [F]=3072)
-declare -A CASE_ITERS=([A]=3145728 [B]=3145728 [C]=3145728 [D]=3145728 [E]=3145728 [F]=3145728)
-declare -A CASE_AGG=([A]=16 [B]=16 [C]=16 [D]=16 [E]=4 [F]=16)
+declare -A CASE_VKB=([A]=3072 [B]=4096 [C]=3072 [D]=3072 [E]=3072 [F]=3072 [G]=4096 [H]=4096)
+declare -A CASE_ITERS=([A]=3145728 [B]=3145728 [C]=3145728 [D]=3145728 [E]=3145728 [F]=3145728 [G]=3145728 [H]=3145728)
+declare -A CASE_AGG=([A]=16 [B]=16 [C]=16 [D]=16 [E]=4 [F]=16 [G]=16 [H]=16)
 declare -A CASE_LABEL=(
   [A]="v3m_a16m_pf8m_a128_L2=4M"
   [B]="v4m_a16m_pf8m_a128_L2=4M"
@@ -45,6 +50,8 @@ declare -A CASE_LABEL=(
   [D]="v3m_a16m_pf16m_a128_L2=4M"
   [E]="v3m_a4m_pf8m_a128_L2=4M"
   [F]="v3m_a16m_pf32m_a128_L2=4M"
+  [G]="v4m_a16m_pf32m_a128_L2=4M"
+  [H]="v4m_a16m_pf16m_a128_L2=4M"
 )
 
 # ── 실행 함수 ─────────────────────────────────────────────────────────────────
@@ -63,8 +70,8 @@ run_case() {
         local vbin dbin extra
         case "$variant" in
             baseline)    vbin="dirtax";   dbin="dirtax";   extra="" ;;
-            pfbypass)    vbin="dutyfree"; dbin="dutyfree"; extra="" ;;
-            pfbypass_llc) vbin="dutyfree"; dbin="dutyfree"; extra="--llc-streaming-bypass" ;;
+            pfbypass)    vbin="dirtax";   dbin="dutyfree"; extra="" ;;
+            pfbypass_llc) vbin="dirtax";  dbin="dutyfree"; extra="--llc-streaming-bypass" ;;
         esac
         local d="${outbase}/${variant}"
         mkdir -p "${d}/victim_only" "${d}/diff_L3" "${d}/same_L3"
@@ -111,40 +118,55 @@ def sv(c, v):   return f"{c/v:.3f}" if c and v else ""
 def si(v):      return f"{int(v)}"  if v is not None else ""
 
 T = "\t"
-base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/main_cases")
-CASES = {"A":"v3m_a16m_pf8m_a128_L2=4M","B":"v3m_a4m_pf8m_a128_L2=4M",
-         "C":"v4m_a6m_pf8m_a8_L2=8M","D":"v3m_a16m_pf8m_a256_L2=4M",
-         "E":"v3m_a16m_pf16m_a128_L2=4M"}
+base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/cxl_latency_zen4c_tuned")
+out  = base / "results.tsv"
+CASES = {
+    "A (pf8m/a128)":  "v3m_a16m_pf8m_a128_L2=4M",
+    "B (vic=4M)":     "v4m_a16m_pf8m_a128_L2=4M",
+    "C (pf8m/a256)":  "v3m_a16m_pf8m_a256_L2=4M",
+    "D (pf16m/a128)": "v3m_a16m_pf16m_a128_L2=4M",
+    "E oracle":       "v3m_a4m_pf8m_a128_L2=4M",
+    "F oracle":       "v3m_a16m_pf32m_a128_L2=4M",
+    "G (B oracle)":   "v4m_a16m_pf32m_a128_L2=4M",
+    "H (vic=4M pf16m)": "v4m_a16m_pf16m_a128_L2=4M",
+}
+HDR = T.join(["Case","bl/diff","bl/same","pf/diff","pf/same","pfl/diff","pfl/same"])
 
-HDR = T.join(["case","conf","bl_diff","bl_same","pf_diff","pf_same","llc_diff","llc_same"])
-
-print("[ Table 1: Victim Slowdown ]")
-print(HDR)
+lines = []
+lines.append("Table 1: Victim Slowdown")
+lines.append(HDR)
 for k, label in CASES.items():
     d = base / label
     bvo=ticks(d/"baseline/victim_only"); pvo=ticks(d/"pfbypass/victim_only"); lvo=ticks(d/"pfbypass_llc/victim_only")
-    print(T.join([k, label,
+    lines.append(T.join([k,
         sv(ticks(d/"baseline/diff_L3"), bvo),  sv(ticks(d/"baseline/same_L3"), bvo),
         sv(ticks(d/"pfbypass/diff_L3"), pvo),  sv(ticks(d/"pfbypass/same_L3"), pvo),
         sv(ticks(d/"pfbypass_llc/diff_L3"),lvo), sv(ticks(d/"pfbypass_llc/same_L3"),lvo)]))
 
-print("\n[ Table 2: PF Replacements ]")
-print(HDR)
+lines.append("")
+lines.append("Table 2: PF Replacement Count")
+lines.append(HDR)
 for k, label in CASES.items():
     d = base / label
-    print(T.join([k, label,
+    lines.append(T.join([k,
         si(pf_repl(d/"baseline/diff_L3")),  si(pf_repl(d/"baseline/same_L3")),
         si(pf_repl(d/"pfbypass/diff_L3")),  si(pf_repl(d/"pfbypass/same_L3")),
         si(pf_repl(d/"pfbypass_llc/diff_L3")), si(pf_repl(d/"pfbypass_llc/same_L3"))]))
 
-print("\n[ Table 3: Victim L2 Miss Count ]")
-print(HDR)
+lines.append("")
+lines.append("Table 3: Victim L2 Miss Count")
+lines.append(HDR)
 for k, label in CASES.items():
     d = base / label
-    print(T.join([k, label,
+    lines.append(T.join([k,
         si(l2_miss(d/"baseline/diff_L3")),  si(l2_miss(d/"baseline/same_L3")),
         si(l2_miss(d/"pfbypass/diff_L3")),  si(l2_miss(d/"pfbypass/same_L3")),
         si(l2_miss(d/"pfbypass_llc/diff_L3")), si(l2_miss(d/"pfbypass_llc/same_L3"))]))
+
+content = "\n".join(lines)
+print(content)
+out.write_text(content + "\n")
+print(f"\n→ saved: {out}")
 PYEOF
 }
 
@@ -153,9 +175,9 @@ MODE="${1:-all}"
 
 case "$MODE" in
     all)
-        for c in A B C D E F; do run_case "$c"; done
+        for c in A B C D E F G H; do run_case "$c"; done
         ;;
-    A|B|C|D|E|F)
+    A|B|C|D|E|F|G|H)
         run_case "$MODE"
         ;;
     results)
