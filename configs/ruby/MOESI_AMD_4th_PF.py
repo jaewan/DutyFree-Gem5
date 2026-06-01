@@ -148,6 +148,28 @@ def define_options(parser):
         dest="llc_streaming_bypass",
         help="STREAMING lines bypass L2 (LLC): L1D <-> Memory only",
     )
+    parser.add_argument(
+        "--cxl-mem-size",
+        type=str,
+        default="0",
+        dest="cxl_mem_size",
+        help="Size of CXL memory range appended above DRAM (0=disabled). "
+        "Processes with mem_pool_id=1 allocate from this range.",
+    )
+    parser.add_argument(
+        "--dram-latency",
+        type=str,
+        default="75ns",
+        dest="dram_latency",
+        help="SimpleMemory latency for the DRAM range (pool 0)",
+    )
+    parser.add_argument(
+        "--cxl-latency",
+        type=str,
+        default="200ns",
+        dest="cxl_latency",
+        help="SimpleMemory latency for the CXL range (pool 1)",
+    )
     # Override common cache defaults to match AMD Zen 4c
     parser.set_defaults(
         l1d_size="32KiB",
@@ -298,5 +320,21 @@ def create_system(
 
     mainCluster.add(cpuCluster)
     ruby_system.network.number_of_virtual_networks = 10
+
+    # Split mem_ranges into [DRAM, CXL] when --cxl-mem-size is given.
+    # setup_memory_controllers (called after us in Ruby.create_system) will
+    # create one SimpleMemory per range; Ruby.py then sets per-range latency.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+        from m5.util.convert import toMemorySize
+
+        cxl_bytes = int(toMemorySize(cxl_size_str))
+        total_bytes = system.mem_ranges[0].size()
+        dram_bytes = total_bytes - cxl_bytes
+        assert dram_bytes > 0, "cxl-mem-size >= mem-size"
+        system.mem_ranges = [
+            m5.objects.AddrRange(0, size=dram_bytes),
+            m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
+        ]
 
     return (cpu_sequencers, dir_cntrl_nodes, mainCluster)

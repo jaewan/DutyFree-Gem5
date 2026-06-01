@@ -166,7 +166,7 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             dir_cntrl.memory_out_port = crossbar.cpu_side_ports
 
         dir_ranges = []
-        for r in system.mem_ranges:
+        for ri, r in enumerate(system.mem_ranges):
             mem_type = ObjectList.mem_list.get(options.mem_type)
             dram_intf = MemConfig.create_mem_intf(
                 mem_type,
@@ -180,6 +180,16 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
                 mem_ctrl = m5.objects.MemCtrl(dram=dram_intf)
             else:
                 mem_ctrl = dram_intf
+
+            # Set per-range latency when CXL emulation is enabled
+            cxl_size_str = getattr(options, "cxl_mem_size", "0")
+            if cxl_size_str not in ("0", "0B", "0GiB", "0MiB") and issubclass(
+                mem_type, m5.objects.SimpleMemory
+            ):
+                if ri == 0:
+                    mem_ctrl.latency = getattr(options, "dram_latency", "75ns")
+                else:
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "200ns")
 
             if options.access_backing_store:
                 dram_intf.kvm_map = False
