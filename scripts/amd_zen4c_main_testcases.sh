@@ -27,7 +27,7 @@ BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
   --mem-type=SimpleMemory \
   --mem-size=2GiB --cxl-mem-size=1GiB \
   --dram-latency=75ns --cxl-latency=200ns"
-LOGBASE="$ROOT/logs/cxl_latency_zen4c_tuned"
+LOGBASE="$ROOT/logs/main_cases"
 
 # ── 케이스 정의 ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
@@ -118,7 +118,7 @@ def sv(c, v):   return f"{c/v:.3f}" if c and v else ""
 def si(v):      return f"{int(v)}"  if v is not None else ""
 
 T = "\t"
-base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/cxl_latency_zen4c_tuned")
+base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/main_cases")
 out  = base / "results.tsv"
 CASES = {
     "A (pf8m/a128)":  "v3m_a16m_pf8m_a128_L2=4M",
