@@ -26,7 +26,30 @@ V=$ROOT/testcase/dirtax/victim
 A=$ROOT/testcase/dirtax/aggressor
 D=$ROOT/testcase/dirtax/dummy
 
-mkdir -p $ROOT/logs/intel_8592_dirtax
+print_results() {
+python3 - << 'PYEOF'
+from pathlib import Path
+base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_8592_dirtax")
+def ticks(d):
+    try:
+        for line in open(d/"stats.txt"):
+            if line.startswith("simTicks "): return int(line.split()[1])
+    except: pass
+    return None
+print(f"{'WS':<6}  {'fit_ratio':>10}  {'slowdown':>10}")
+    a = ticks(base/f"alone_22m")
+    w = ticks(base/f"with_agg_22m")
+    sl = f"{w/a:.3f}x" if a and w else "n/a"
+    print(f"22m            55%  {sl:>10}")
+    a = ticks(base/f"alone_28m")
+    w = ticks(base/f"with_agg_28m")
+    sl = f"{w/a:.3f}x" if a and w else "n/a"
+    print(f"28m            70%  {sl:>10}")
+PYEOF
+}
+
+run_all() {
+    mkdir -p $ROOT/logs/intel_8592_dirtax
 
 echo "===== Intel 8592+ Directory Tax (LLC=40MiB, 20-way) ====="
 
@@ -48,22 +71,13 @@ for vs in 22528 28672; do
     echo "  started: with_agg_${tag} [PID $!]"
 done
 
-wait
-echo "Done."
+    wait
+    echo "Done."
+    print_results
+}
 
-python3 - << 'PYEOF'
-from pathlib import Path
-base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_8592_dirtax")
-def ticks(d):
-    try:
-        for line in open(d/"stats.txt"):
-            if line.startswith("simTicks "): return int(line.split()[1])
-    except: pass
-    return None
-print(f"{'WS':<8}  {'alone':>15}  {'with_agg':>15}  slowdown")
-for tag, fit in [("22m","55%"), ("28m","70%")]:
-    a = ticks(base/f"alone_{tag}")
-    w = ticks(base/f"with_agg_{tag}")
-    sl = f"{w/a:.3f}x" if a and w else "n/a"
-    print(f"{tag:<8}  {str(a or ''):>15}  {str(w or ''):>15}  {sl}  (fit_ratio≈{fit})")
-PYEOF
+case "${1:-all}" in
+    results) print_results ;;
+    all)     run_all ;;
+    *)       echo "Usage: $0 [all|results]"; exit 1 ;;
+esac

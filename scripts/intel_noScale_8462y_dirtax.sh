@@ -36,7 +36,24 @@ COMMON="$CFG
     --mem-size=2GiB --cxl-mem-size=1GiB
     --dram-latency=124ns --cxl-latency=467ns"
 
-mkdir -p $ROOT/logs/intel_noScale_8462y_dirtax
+print_results() {
+python3 - << 'PYEOF'
+from pathlib import Path
+base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_noScale_8462y_dirtax")
+def ticks(d):
+    try:
+        for line in open(d/"stats.txt"):
+            if line.startswith("simTicks "): return int(line.split()[1])
+    except: pass
+    return None
+a = ticks(base/"alone"); w = ticks(base/"with_agg")
+sl = f"{w/a:.3f}x" if a and w else "n/a"
+print(f"slowdown: {sl}")
+PYEOF
+}
+
+run_all() {
+    mkdir -p $ROOT/logs/intel_noScale_8462y_dirtax
 
 echo "===== Intel 8462Y+ original scale (LLC=64MiB, 32 cores) ====="
 
@@ -50,19 +67,13 @@ $GEM5 --outdir=$ROOT/logs/intel_noScale_8462y_dirtax/with_agg \
     > $ROOT/logs/intel_noScale_8462y_dirtax/with_agg.log 2>&1 &
 echo "  started: with_agg [PID $!]"
 
-wait
-echo "Done."
+    wait
+    echo "Done."
+    print_results
+}
 
-python3 - << 'PYEOF'
-from pathlib import Path
-base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_noScale_8462y_dirtax")
-def ticks(d):
-    try:
-        for line in open(d/"stats.txt"):
-            if line.startswith("simTicks "): return int(line.split()[1])
-    except: pass
-    return None
-a = ticks(base/"alone"); w = ticks(base/"with_agg")
-print(f"alone:    {str(a or 'n/a'):>15}")
-print(f"with_agg: {str(w or 'n/a'):>15}  slowdown={w/a:.3f}x" if a and w else "with_agg: n/a")
-PYEOF
+case "${1:-all}" in
+    results) print_results ;;
+    all)     run_all ;;
+    *)       echo "Usage: $0 [all|results]"; exit 1 ;;
+esac
