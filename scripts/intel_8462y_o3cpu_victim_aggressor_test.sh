@@ -24,12 +24,12 @@
 #   CPU0: victim   CPU1: dummy  CPU2: aggressor  CPU3: dummy
 #   CPU4: aggressor CPU5: dummy  CPU6: aggressor  CPU7: dummy
 
-mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax
+mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax_o3
 
 CHI_COMMON="/home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py
     --ruby --topology=Pt2Pt
     --num-l3caches=8 --num-dirs=1
-    --cpu-type=TimingSimpleCPU --num-cpus=8 --cpu-clock=2.8GHz
+    --cpu-type=O3CPU --num-cpus=8 --cpu-clock=2.8GHz
     --l1d_size=48KiB --l1d_assoc=12
     --l1i_size=32KiB --l1i_assoc=8
     --l2_size=2MiB   --l2_assoc=16
@@ -50,8 +50,8 @@ run_case() {
     local victim_n="$2"
     local victim_iters="$3"
     local tag="$4"
-    local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}_m5out"
-    local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax/${tag}.log"
+    local outdir="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax_o3/${tag}_m5out"
+    local logfile="/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax_o3/${tag}.log"
 
     # victim;aggressor×7
     local OPTS="${victim_n} ${victim_iters};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS};${AGG_OPTS}"
@@ -72,8 +72,8 @@ run_baseline() {
     local victim_n="$2"
     local victim_iters="$3"
     local tag="$4"
-    local outdir="$ROOT/logs/intel_dirtax/${tag}_m5out"
-    local logfile="$ROOT/logs/intel_dirtax/${tag}.log"
+    local outdir="$ROOT/logs/intel_dirtax_o3/${tag}_m5out"
+    local logfile="$ROOT/logs/intel_dirtax_o3/${tag}.log"
     local D="$ROOT/testcase/dirtax/dummy"
 
     echo "=== ${label} (baseline, no aggressors) ==="
@@ -94,15 +94,15 @@ run_nagg() {
     local V="$ROOT/testcase/dirtax/victim"
     local A="$ROOT/testcase/dirtax/aggressor"
     local D="$ROOT/testcase/dirtax/dummy"
-    local outdir="$ROOT/logs/intel_dirtax/nagg${nagg}/${ws_tag}_m5out"
-    local logfile="$ROOT/logs/intel_dirtax/nagg${nagg}/${ws_tag}.log"
+    local outdir="$ROOT/logs/intel_dirtax_o3/nagg${nagg}/${ws_tag}_m5out"
+    local logfile="$ROOT/logs/intel_dirtax_o3/nagg${nagg}/${ws_tag}.log"
 
     local progs="$V"
     local opts="${victim_n} ${victim_iters}"
     for ((i=1; i<=nagg; i++));    do progs="$progs;$A"; opts="$opts;${AGG_OPTS}"; done
     for ((i=nagg+1; i<=7; i++)); do progs="$progs;$D"; opts="$opts;"; done
 
-    mkdir -p "$ROOT/logs/intel_dirtax/nagg${nagg}"
+    mkdir -p "$ROOT/logs/intel_dirtax_o3/nagg${nagg}"
     /home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir="${outdir}" \
         ${CHI_COMMON} \
         -c "${progs}" \
@@ -120,7 +120,7 @@ print_results() {
 python3 - << 'PYEOF'
 from pathlib import Path
 
-BASE = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax")
+BASE = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_dirtax_o3")
 WS   = [("512k","≈0%"),("2m","≈12.5%"),("4m","≈25%"),
         ("8m","≈50%"),("12m","≈75%"),("16m","≈100%"),("24m",">100%")]
 
