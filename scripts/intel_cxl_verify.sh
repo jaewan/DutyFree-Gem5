@@ -6,7 +6,7 @@
 # C: CXL 분리, victim(CPU0)→DRAM 200ns → A보다 느려야 함
 
 ROOT=/home/naivete/DutyFree-Gem5-pakeunji
-GEM5=$ROOT/build_X86_CHI/gem5.opt
+GEM5=$ROOT/build_Intel_8462Y/gem5.opt
 CFG=$ROOT/configs/deprecated/example/se.py
 
 # L2=512KiB, L3=512KiB → victim 1MiB가 L3 못 들어감 → DRAM 접근

@@ -22,7 +22,7 @@ static inline void gem5_reset_stats(void) {
     __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00" : : "D"(0ULL), "S"(0ULL));
 }
 
-#define MAX_KB (8 * 1024)
+#define MAX_KB (256 * 1024)
 static int arr[MAX_KB * 1024 / sizeof(int)];
 
 int main(int argc, char *argv[])

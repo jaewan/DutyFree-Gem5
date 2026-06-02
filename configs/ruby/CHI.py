@@ -124,10 +124,13 @@ def create_system(
     CHI_RNI_DMA = chi_defs.CHI_RNI_DMA
     CHI_RNI_IO = chi_defs.CHI_RNI_IO
 
-    class HNFCache(RubyCache):
-        # SPR L3 ~33ns → 66 cy @ Ruby 2GHz
-        dataAccessLatency = 64
-        tagAccessLatency = 2
+    # Use HNFCache from chi_defs if defined (per-platform latency), else default
+    if hasattr(chi_defs, "HNFCache"):
+        _HNFBase = chi_defs.HNFCache
+    else:
+        _HNFBase = RubyCache
+
+    class HNFCache(_HNFBase):
         size = options.l3_size
         assoc = options.l3_assoc
 
@@ -183,8 +186,43 @@ def create_system(
     for m in other_memories:
         sysranges.append(m.range)
 
+    # Split mem_ranges into [DRAM, CXL] early so HNF/SNF creation uses correct ranges.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+        from m5.util.convert import toMemorySize
+
+        cxl_bytes = int(toMemorySize(cxl_size_str))
+        total_bytes = system.mem_ranges[0].size()
+        dram_bytes = total_bytes - cxl_bytes
+        assert dram_bytes > 0, "cxl-mem-size >= mem-size"
+        system.mem_ranges = [
+            m5.objects.AddrRange(0, size=dram_bytes),
+            m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
+        ]
+
+    # CXL 1:1 mode: num-dirs=2 with CXL enabled → separate SNF per memory type
+    cxl_one_to_one = (
+        cxl_size_str not in ("0", "0B", "0GiB", "0MiB")
+        and options.num_dirs == 2
+    )
+
     hnf_list = [i for i in range(options.num_l3caches)]
-    CHI_HNF.createAddrRanges(sysranges, system.cache_line_size.value, hnf_list)
+    if cxl_one_to_one:
+        # Split HNFs: first half handles DRAM range, second half handles CXL range
+        half = options.num_l3caches // 2
+        dram_hnfs = hnf_list[:half]
+        cxl_hnfs = hnf_list[half:]
+        CHI_HNF.createAddrRanges(
+            [system.mem_ranges[0]], system.cache_line_size.value, dram_hnfs
+        )
+        CHI_HNF.createAddrRanges(
+            [system.mem_ranges[1]], system.cache_line_size.value, cxl_hnfs
+        )
+    else:
+        CHI_HNF.createAddrRanges(
+            sysranges, system.cache_line_size.value, hnf_list
+        )
+
     ruby_system.hnf = [
         CHI_HNF(i, ruby_system, HNFCache, None)
         for i in range(options.num_l3caches)
@@ -205,6 +243,7 @@ def create_system(
         CHI_SNF_MainMem(ruby_system, None, None)
         for i in range(options.num_dirs)
     ]
+    snf_cntrls = []
     for snf in ruby_system.snf:
         network_nodes.append(snf)
         network_cntrls.extend(snf.getNetworkSideControllers())
@@ -212,6 +251,7 @@ def create_system(
         mem_cntrls.extend(snf.getAllControllers())
         all_cntrls.extend(snf.getAllControllers())
         mem_dests.extend(snf.getAllControllers())
+        snf_cntrls.append(snf.getAllControllers())
 
     if len(other_memories) > 0:
         ruby_system.rom_snf = [
@@ -248,8 +288,16 @@ def create_system(
             rni.setDownstream(hnf_dests)
     if full_system:
         ruby_system.io_rni.setDownstream(hnf_dests)
-    for hnf in ruby_system.hnf:
-        hnf.setDownstream(mem_dests)
+    if cxl_one_to_one and len(snf_cntrls) == 2:
+        # DRAM HNFs → SNF0, CXL HNFs → SNF1
+        half = options.num_l3caches // 2
+        for hnf in ruby_system.hnf[:half]:
+            hnf.setDownstream(snf_cntrls[0])
+        for hnf in ruby_system.hnf[half:]:
+            hnf.setDownstream(snf_cntrls[1])
+    else:
+        for hnf in ruby_system.hnf:
+            hnf.setDownstream(mem_dests)
 
     # Setup data message size for all controllers
     for cntrl in all_cntrls:
@@ -276,19 +324,5 @@ def create_system(
         topology = create_topology(network_cntrls, options)
     else:
         m5.fatal(f"{options.topology} not supported!")
-
-    # Split mem_ranges into [DRAM, CXL] when --cxl-mem-size is given.
-    cxl_size_str = getattr(options, "cxl_mem_size", "0")
-    if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
-        from m5.util.convert import toMemorySize
-
-        cxl_bytes = int(toMemorySize(cxl_size_str))
-        total_bytes = system.mem_ranges[0].size()
-        dram_bytes = total_bytes - cxl_bytes
-        assert dram_bytes > 0, "cxl-mem-size >= mem-size"
-        system.mem_ranges = [
-            m5.objects.AddrRange(0, size=dram_bytes),
-            m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
-        ]
 
     return (cpu_sequencers, mem_cntrls, topology)

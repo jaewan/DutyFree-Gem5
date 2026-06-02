@@ -7,7 +7,7 @@
  * Sequential stride-1 read-only — bandwidth-bound, no dependency chain.
  * Static array avoids malloc/mmap so gem5 SE VMA tracking is stable. */
 
-#define MAX_MB 16
+#define MAX_MB 512
 static volatile int arr[MAX_MB * 1024 * 1024 / sizeof(int)];
 
 int main(int argc, char *argv[])

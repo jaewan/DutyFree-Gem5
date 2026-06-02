@@ -865,3 +865,9 @@ class CHI_RNI_IO(CHI_RNI_Base):
     def __init__(self, ruby_system, parent):
         super().__init__(ruby_system, parent)
         ruby_system._io_port = self._sequencer
+
+
+class HNFCache(RubyCache):
+    # EMR 실측: ~48ns (PF ON) → 96cy @ Ruby 2GHz
+    dataAccessLatency = 94
+    tagAccessLatency = 2

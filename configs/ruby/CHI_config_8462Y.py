@@ -65,14 +65,14 @@ class L1ICache(RubyCache):
 
 
 class L1DCache(RubyCache):
-    # EMR 실측: ~2.65ns / ~5cy @ 1.9GHz → 5cy @ Ruby 2GHz = 2.5ns
-    dataAccessLatency = 4
+    # SPR 실측: ~1.2ns → 3cy @ Ruby 2GHz = 1.5ns
+    dataAccessLatency = 2
     tagAccessLatency = 1
 
 
 class L2Cache(RubyCache):
-    # EMR 실측: ~9ns / ~16-20cy @ 1.9GHz → 18cy @ Ruby 2GHz = 9ns
-    dataAccessLatency = 16
+    # SPR 실측: ~5.0ns → 10cy @ Ruby 2GHz = 5ns
+    dataAccessLatency = 8
     tagAccessLatency = 2
 
 
@@ -865,3 +865,9 @@ class CHI_RNI_IO(CHI_RNI_Base):
     def __init__(self, ruby_system, parent):
         super().__init__(ruby_system, parent)
         ruby_system._io_port = self._sequencer
+
+
+class HNFCache(RubyCache):
+    # SPR 실측: ~28ns (true random) → 56cy @ Ruby 2GHz
+    dataAccessLatency = 54
+    tagAccessLatency = 2

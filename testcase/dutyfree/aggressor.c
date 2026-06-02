@@ -19,7 +19,7 @@ static inline void gem5_set_streaming(void *addr, long size) {
                      : : "D"((long)addr), "S"(size) : "rax");
 }
 
-#define MAX_MB 16
+#define MAX_MB 512
 static volatile int arr[MAX_MB * 1024 * 1024 / sizeof(int)];
 
 int main(int argc, char *argv[])

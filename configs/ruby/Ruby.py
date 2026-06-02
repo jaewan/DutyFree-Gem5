@@ -154,25 +154,36 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
         # lowest bits above the block offset bits
         intlv_size = options.cacheline_size
 
-    # Sets bits to be used for interleaving.  Creates memory controllers
-    # attached to a directory controller.  A separate controller is created
-    # for each address range as the abstract memory can handle only one
-    # contiguous address range as of now.
+    # Check if CXL 1:1 mapping is requested:
+    # when num_dirs == num mem_ranges, assign each dir its own range exclusively.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    cxl_one_to_one = cxl_size_str not in ("0", "0B", "0GiB", "0MiB") and len(
+        dir_cntrls
+    ) == len(system.mem_ranges)
+
     for dir_cntrl in dir_cntrls:
         crossbar = None
-        if len(system.mem_ranges) > 1:
+        if len(system.mem_ranges) > 1 and not cxl_one_to_one:
             crossbar = IOXBar()
             crossbars.append(crossbar)
             dir_cntrl.memory_out_port = crossbar.cpu_side_ports
 
+        # In 1:1 mode, each dir_cntrl owns exactly one mem_range.
+        ranges_for_this_dir = (
+            [system.mem_ranges[index]] if cxl_one_to_one else system.mem_ranges
+        )
+
         dir_ranges = []
-        for ri, r in enumerate(system.mem_ranges):
+        for ri, r in enumerate(ranges_for_this_dir):
             mem_type = ObjectList.mem_list.get(options.mem_type)
+            intlv_bits = (
+                0 if cxl_one_to_one else int(math.log(options.num_dirs, 2))
+            )
             dram_intf = MemConfig.create_mem_intf(
                 mem_type,
                 r,
-                index,
-                int(math.log(options.num_dirs, 2)),
+                0 if cxl_one_to_one else index,
+                intlv_bits,
                 intlv_size,
                 options.xor_low_bit,
             )
@@ -182,11 +193,12 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
                 mem_ctrl = dram_intf
 
             # Set per-range latency when CXL emulation is enabled
-            cxl_size_str = getattr(options, "cxl_mem_size", "0")
             if cxl_size_str not in ("0", "0B", "0GiB", "0MiB") and issubclass(
                 mem_type, m5.objects.SimpleMemory
             ):
-                if ri == 0:
+                # In 1:1 mode, use dir index to determine DRAM vs CXL
+                range_idx = index if cxl_one_to_one else ri
+                if range_idx == 0:
                     mem_ctrl.latency = getattr(options, "dram_latency", "75ns")
                 else:
                     mem_ctrl.latency = getattr(options, "cxl_latency", "200ns")

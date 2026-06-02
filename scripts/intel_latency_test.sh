@@ -22,7 +22,7 @@ mkdir -p /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency
 echo "=== Launching CHI latency tests ==="
 
 # ── L1 read ───────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_read_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_read_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -33,7 +33,7 @@ echo "=== Launching CHI latency tests ==="
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_read_1t.log 2>&1 &
 echo "  started: l1_read_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_read_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_read_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -45,7 +45,7 @@ echo "  started: l1_read_1t"
 echo "  started: l1_read_8t"
 
 # ── L1 write ──────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_write_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_write_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -56,7 +56,7 @@ echo "  started: l1_read_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_write_1t.log 2>&1 &
 echo "  started: l1_write_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_write_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l1_write_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -68,7 +68,7 @@ echo "  started: l1_write_1t"
 echo "  started: l1_write_8t"
 
 # ── L2 read (private per-CPU L2: 512KiB) ─────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_read_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_read_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -79,7 +79,7 @@ echo "  started: l1_write_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_read_1t.log 2>&1 &
 echo "  started: l2_read_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_read_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_read_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -91,7 +91,7 @@ echo "  started: l2_read_1t"
 echo "  started: l2_read_8t"
 
 # ── L2 write ──────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_write_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_write_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -102,7 +102,7 @@ echo "  started: l2_read_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_write_1t.log 2>&1 &
 echo "  started: l2_write_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_write_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l2_write_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -114,7 +114,7 @@ echo "  started: l2_write_1t"
 echo "  started: l2_write_8t"
 
 # ── L3 read (shared HNF: 16MiB) ───────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_read_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_read_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -125,7 +125,7 @@ echo "  started: l2_write_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_read_1t.log 2>&1 &
 echo "  started: l3_read_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_read_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_read_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -137,7 +137,7 @@ echo "  started: l3_read_1t"
 echo "  started: l3_read_8t"
 
 # ── L3 write ──────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_write_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_write_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -148,7 +148,7 @@ echo "  started: l3_read_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_write_1t.log 2>&1 &
 echo "  started: l3_write_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_write_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/l3_write_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -160,7 +160,7 @@ echo "  started: l3_write_1t"
 echo "  started: l3_write_8t"
 
 # ── MEM read ──────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_read_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_read_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -171,7 +171,7 @@ echo "  started: l3_write_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_read_1t.log 2>&1 &
 echo "  started: mem_read_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_read_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_read_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
@@ -183,7 +183,7 @@ echo "  started: mem_read_1t"
 echo "  started: mem_read_8t"
 
 # ── MEM write ─────────────────────────────────────────────────────────────────
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_write_1t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_write_1t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=1 \
@@ -194,7 +194,7 @@ echo "  started: mem_read_8t"
     > /home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_write_1t.log 2>&1 &
 echo "  started: mem_write_1t"
 
-/home/naivete/DutyFree-Gem5-pakeunji/build_X86_CHI/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_write_8t_m5out \
+/home/naivete/DutyFree-Gem5-pakeunji/build_Intel_8462Y/gem5.opt --outdir=/home/naivete/DutyFree-Gem5-pakeunji/logs/intel_latency/mem_write_8t_m5out \
     /home/naivete/DutyFree-Gem5-pakeunji/configs/deprecated/example/se.py \
     --ruby --topology=Pt2Pt --num-l3caches=1 --num-dirs=1 \
     --cpu-type=TimingSimpleCPU --num-cpus=8 \
