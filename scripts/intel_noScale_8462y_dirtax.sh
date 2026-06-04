@@ -34,7 +34,7 @@ COMMON="$CFG
     --l3_size=2MiB   --l3_assoc=16
     --mem-type=SimpleMemory
     --mem-size=2GiB --cxl-mem-size=1GiB
-    --dram-latency=124ns --cxl-latency=467ns"
+    --dram-latency=127ns --cxl-latency=218ns"
 
 print_results() {
 python3 - << 'PYEOF'

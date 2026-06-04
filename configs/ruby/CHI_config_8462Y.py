@@ -341,13 +341,12 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DCT = True
         self.send_evictions = False
         # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
-        # alloc_on_readonce=True kept so streaming reads still fill LLC
-        # (required for Directory Tax baseline experiment).
+        # Intel NINE: only L2 victim evictions fill LLC (WriteEvictFull/WriteBackFull).
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False
         self.alloc_on_readshared = False
         self.alloc_on_readunique = False
-        self.alloc_on_readonce = True
+        self.alloc_on_readonce = False
         self.alloc_on_writeback = True
         self.alloc_on_atomic = True
         self.dealloc_on_unique = True

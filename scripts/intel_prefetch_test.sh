@@ -20,7 +20,7 @@ COMMON_ARGS=(
     --l1i_size=32KiB --l1i_assoc=8
     --l2_size=2MiB  --l2_assoc=16
     --l3_size=2MiB  --l3_assoc=16
-    --mem-type=SimpleMemory --dram-latency=107ns
+    --mem-type=SimpleMemory --dram-latency=127ns --cxl-latency=218ns
     -c "$BIN" --options "$WS $PASSES"
 )
 

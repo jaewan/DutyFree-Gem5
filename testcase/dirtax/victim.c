@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
         int tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
     }
 
-    /* Warmup: traverse full chain once to warm L2 and refresh PF LRU */
+    /* Warmup: traverse full chain once to warm L2 + PF */
     long idx = 0, sum = 0;
     for (long i = 0; i < N; i++)
         idx = arr[idx];

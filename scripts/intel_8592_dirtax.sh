@@ -37,14 +37,14 @@ def ticks(d):
     except: pass
     return None
 print(f"{'WS':<6}  {'fit_ratio':>10}  {'slowdown':>10}")
-    a = ticks(base/f"alone_22m")
-    w = ticks(base/f"with_agg_22m")
-    sl = f"{w/a:.3f}x" if a and w else "n/a"
-    print(f"22m            55%  {sl:>10}")
-    a = ticks(base/f"alone_28m")
-    w = ticks(base/f"with_agg_28m")
-    sl = f"{w/a:.3f}x" if a and w else "n/a"
-    print(f"28m            70%  {sl:>10}")
+a = ticks(base/f"alone_22m")
+w = ticks(base/f"with_agg_22m")
+sl = f"{w/a:.3f}x" if a and w else "n/a"
+print(f"22m            55%  {sl:>10}")
+a = ticks(base/f"alone_28m")
+w = ticks(base/f"with_agg_28m")
+sl = f"{w/a:.3f}x" if a and w else "n/a"
+print(f"28m            70%  {sl:>10}")
 PYEOF
 }
 

@@ -35,7 +35,7 @@ echo ""
 echo "=== B: CXL 분리, victim→DRAM 107ns (A와 같아야 함) ==="
 $GEM5 --outdir=$ROOT/logs/cxl_verify/B $CFG $COMMON \
     --mem-size=2GiB --cxl-mem-size=1GiB \
-    --dram-latency=107ns --cxl-latency=214ns \
+    --dram-latency=127ns --cxl-latency=218ns \
     -c "$VICTIM;$DUMMY" --options "$OPTS" \
     > $ROOT/logs/cxl_verify/B.log 2>&1
 grep "^simTicks" $ROOT/logs/cxl_verify/B/stats.txt
@@ -44,7 +44,7 @@ echo ""
 echo "=== C: CXL 분리, victim→DRAM 214ns (A보다 느려야 함) ==="
 $GEM5 --outdir=$ROOT/logs/cxl_verify/C $CFG $COMMON \
     --mem-size=2GiB --cxl-mem-size=1GiB \
-    --dram-latency=214ns --cxl-latency=214ns \
+    --dram-latency=127ns --cxl-latency=218ns \
     -c "$VICTIM;$DUMMY" --options "$OPTS" \
     > $ROOT/logs/cxl_verify/C.log 2>&1
 grep "^simTicks" $ROOT/logs/cxl_verify/C/stats.txt

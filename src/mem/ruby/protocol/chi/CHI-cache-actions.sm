@@ -148,6 +148,7 @@ action(AllocateTBE_SeqRequest, desc="") {
       out_msg.is_remote_pf := false;
       out_msg.txnId := max_outstanding_transactions;
       out_msg.ns := !in_msg.isSecure;
+      out_msg.isStreaming := in_msg.isStreamingSet();
 
       out_msg.atomic_op.clear();
       out_msg.atomic_op.orMask(in_msg.writeMask);
@@ -258,6 +259,7 @@ action(Initiate_Request, desc="") {
     set_tbe(allocateRequestTBE(address, in_msg));
     // only a msg that was already retried doesn't allow a retry
     was_retried := in_msg.allowRetry == false;
+    tbe.isStreaming := in_msg.isStreaming;
   }
   DirEntry dir_entry := getDirEntry(address);
   copyCacheAndDir(cache_entry, dir_entry, tbe, initial);
@@ -267,7 +269,7 @@ action(Initiate_Request, desc="") {
 
   bool alloc_entry := needCacheEntry(tbe.reqType,
                                      cache_entry, dir_entry,
-                                     tbe.is_local_pf);
+                                     tbe.is_local_pf, tbe.isStreaming);
   bool dealloc_entry := needDeallocCacheEntry(tbe.reqType);
   assert((alloc_entry && dealloc_entry) == false);
 
@@ -401,6 +403,10 @@ action(Initiate_Replacement, desc="") {
     DPRINTF(RubySlicc, "Allocated replacement TBE on new slot %d\n", tbe.storSlot);
   }
   copyCacheAndDir(cache_entry, getDirEntry(address), tbe, initial);
+  // Propagate STREAMING flag so WriteEvictFull carries it to HNF
+  if (is_valid(cache_entry)) {
+    tbe.isStreaming := cache_entry.isStreaming;
+  }
 
   // UD_RU line needs to be written back because the upstream may be in UC state.
   if (initial == State:UD_RU) {
@@ -3403,7 +3409,8 @@ action(Finalize_UpdateCacheFromTBE, desc="") {
     assert(tbe.dataValid);
     assert(is_valid(cache_entry));
     cache_entry.DataBlk := tbe.dataBlk;
-    DPRINTF(RubySlicc, "Cached data %s pfb %s\n", tbe.dataBlk, cache_entry.HWPrefetched);
+    cache_entry.isStreaming := tbe.isStreaming;
+    DPRINTF(RubySlicc, "Cached data %s pfb %s streaming %s\n", tbe.dataBlk, cache_entry.HWPrefetched, tbe.isStreaming);
   } else {
     // make sure only deallocate the cache entry if data is invalid
     assert(tbe.dataValid == false);
@@ -3457,7 +3464,9 @@ action(CheckCacheFill, desc="") {
   assert(is_valid(tbe));
 
   // only perform the write if we have valid data and need to write
-  bool need_fill := tbe.dataValid && (tbe.dataToBeInvalid == false) && tbe.doCacheFill;
+  // STREAMING: HNF skips L3 fill — data passes through to L2 only
+  bool need_fill := tbe.dataValid && (tbe.dataToBeInvalid == false)
+                    && tbe.doCacheFill && !(is_HN && tbe.isStreaming);
   bool execute_next := true;
 
   if (need_fill && is_valid(cache_entry)) {
