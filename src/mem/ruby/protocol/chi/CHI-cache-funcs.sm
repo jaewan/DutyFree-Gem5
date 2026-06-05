@@ -1103,7 +1103,10 @@ State makeFinalState(TBE tbe, CacheEntry cache_entry, DirEntry dir_entry) {
   State cache_state := State:I;
   State dir_state := State:I;
 
-  if (tbe.dir_ownerExists) {
+  // H3: STREAMING at HNF has no directory entry — skip dir state machine
+  if (is_HN && tbe.isStreaming) {
+    // dir_state remains I; fall through to cache_state calculation
+  } else if (tbe.dir_ownerExists) {
     assert(is_valid(dir_entry));
     assert(tbe.dataMaybeDirtyUpstream);
     if (tbe.dir_ownerIsExcl) {

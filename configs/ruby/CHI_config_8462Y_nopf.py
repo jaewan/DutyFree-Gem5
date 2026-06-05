@@ -65,14 +65,14 @@ class L1ICache(RubyCache):
 
 
 class L1DCache(RubyCache):
-    # EMR 실측: ~2.65ns / ~5cy @ 1.9GHz → 5cy @ Ruby 2GHz = 2.5ns
-    dataAccessLatency = 4
+    # SPR 실측: ~1.2ns → 3cy @ Ruby 2GHz = 1.5ns
+    dataAccessLatency = 3
     tagAccessLatency = 1
 
 
 class L2Cache(RubyCache):
-    # EMR 실측: ~9ns / ~16-20cy @ 1.9GHz → 18cy @ Ruby 2GHz = 9ns
-    dataAccessLatency = 14
+    # SPR 실측: ~5.0ns → 10cy @ Ruby 2GHz = 5ns
+    dataAccessLatency = 8
     tagAccessLatency = 2
 
 
@@ -341,13 +341,12 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DCT = True
         self.send_evictions = False
         # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
-        # alloc_on_readonce=True kept so streaming reads still fill LLC
-        # (required for Directory Tax baseline experiment).
+        # Intel NINE: only L2 victim evictions fill LLC (WriteEvictFull/WriteBackFull).
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False
         self.alloc_on_readshared = False
         self.alloc_on_readunique = False
-        self.alloc_on_readonce = True
+        self.alloc_on_readonce = False
         self.alloc_on_writeback = True
         self.alloc_on_atomic = True
         self.dealloc_on_unique = True
@@ -493,7 +492,6 @@ class CHI_RNF(CHI_Node):
         l1Dcache_type,
         cache_line_size,
         l1Iprefetcher_type=None,
-        l1Dprefetcher_type=None,
     ):
         super().__init__(ruby_system)
 
@@ -579,7 +577,7 @@ class CHI_RNF(CHI_Node):
         return self._cpus
 
     # Adds a private L2 for each cpu
-    def addPrivL2Cache(self, cache_type, pf_type=None):
+    def addPrivL2Cache(self, cache_type):
         self._ll_cntrls = []
         for cpu in self._cpus:
             l2_cache = cache_type(
@@ -620,14 +618,12 @@ class CHI_RNF(CHI_Node):
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
                 L1DCache(size=options.l1d_size, assoc=options.l1d_assoc),
                 options.cacheline_size,
-                l1Dprefetcher_type=L1DIntelPF,
             )
             for cpu in cpus
         ]
         for rnf in rnfs:
             rnf.addPrivL2Cache(
                 L2Cache(size=options.l2_size, assoc=options.l2_assoc),
-                pf_type=L2IntelPF,
             )
         return rnfs
 
@@ -868,6 +864,6 @@ class CHI_RNI_IO(CHI_RNI_Base):
 
 
 class HNFCache(RubyCache):
-    # EMR 실측: ~48ns (PF ON) → 96cy @ Ruby 2GHz
-    dataAccessLatency = 74
+    # SPR 실측: ~28ns (true random) → 56cy @ Ruby 2GHz
+    dataAccessLatency = 53
     tagAccessLatency = 2

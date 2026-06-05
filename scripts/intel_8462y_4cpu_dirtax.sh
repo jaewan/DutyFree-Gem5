@@ -21,7 +21,7 @@ COMMON="$CFG
     --l3_size=2MiB   --l3_assoc=16
     --mem-type=SimpleMemory
     --mem-size=4GiB --cxl-mem-size=2GiB
-    --dram-latency=127ns --cxl-latency=218ns"
+    --dram-latency=150ns --cxl-latency=300ns"
 
 V=$ROOT/testcase/dirtax/victim
 A=$ROOT/testcase/dirtax/aggressor
@@ -38,7 +38,7 @@ def ticks(d):
     except: pass
     return None
 print(f"{'pct':<6}  {'vs_kb':>8}  {'slowdown':>10}")
-for pct, vs in [("25p",2048), ("50p",4096), ("75p",6144), ("100p",8192)]:
+for pct, vs in [("25p",2048), ("40p",3276), ("45p",3686), ("50p",4096), ("53p",4341), ("55p",4505), ("60p",4915), ("75p",6144), ("100p",8192)]:
     a = ticks(base/f"alone_{pct}")
     w = ticks(base/f"with_agg_{pct}")
     sl = f"{w/a:.3f}x" if a and w else "n/a"

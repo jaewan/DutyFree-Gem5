@@ -21,7 +21,7 @@ COMMON="$CFG
     --l3_size=2MiB   --l3_assoc=16
     --mem-type=SimpleMemory
     --mem-size=4GiB --cxl-mem-size=2GiB
-    --dram-latency=127ns --cxl-latency=218ns"
+    --dram-latency=150ns --cxl-latency=300ns"
 
 V=$ROOT/testcase/dirtax/victim
 A=$ROOT/testcase/dirtax/aggressor
@@ -38,7 +38,7 @@ def ticks(d):
     except: pass
     return None
 print(f"{'pct':<6}  {'vs_kb':>8}  {'slowdown':>10}")
-for pct, vs in [("25p",4096), ("50p",8192), ("75p",12288), ("100p",16384)]:
+for pct, vs in [("25p",4096), ("40p",6553), ("45p",7372), ("50p",8192), ("53p",8683), ("55p",9011), ("60p",9830), ("75p",12288), ("100p",16384)]:
     a = ticks(base/f"alone_{pct}")
     w = ticks(base/f"with_agg_{pct}")
     sl = f"{w/a:.3f}x" if a and w else "n/a"
@@ -50,10 +50,10 @@ run_all() {
     mkdir -p $ROOT/logs/intel_8462y_8cpu_dirtax
     echo "===== Intel 8462Y+ Directory Tax (8 CPU, LLC=16MiB) ====="
 
-    for pct in 25 50 75 100; do
+    for pct in 25 40 45 50 53 55 60 75 100; do
         vs=$((LLC_KIB * pct / 100))
         tag="${pct}p"
-        iters=$((vs * 256))
+        iters=3145728
 
         $GEM5 --outdir=$ROOT/logs/intel_8462y_8cpu_dirtax/alone_${tag} \
             $COMMON \

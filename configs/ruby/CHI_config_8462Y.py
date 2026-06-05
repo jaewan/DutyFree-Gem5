@@ -66,7 +66,7 @@ class L1ICache(RubyCache):
 
 class L1DCache(RubyCache):
     # SPR 실측: ~1.2ns → 3cy @ Ruby 2GHz = 1.5ns
-    dataAccessLatency = 2
+    dataAccessLatency = 3
     tagAccessLatency = 1
 
 
@@ -868,5 +868,5 @@ class CHI_RNI_IO(CHI_RNI_Base):
 
 class HNFCache(RubyCache):
     # SPR 실측: ~28ns (true random) → 56cy @ Ruby 2GHz
-    dataAccessLatency = 54
+    dataAccessLatency = 53
     tagAccessLatency = 2

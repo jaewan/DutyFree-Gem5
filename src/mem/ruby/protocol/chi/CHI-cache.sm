@@ -131,6 +131,10 @@ machine(MachineType:Cache, "Cache coherency protocol") :
   // possible.
   bool enable_DCT;
 
+  // H3: skip HNF directory tracking for STREAMING lines (coherence bypass).
+  // When enabled, HNF does not register STREAMING lines as sharers, preventing
+  // back-probes. Tradeoff: no DCT forwarding for multi-reader STREAMING.
+
   // Atomic Operation Policy
   // All Near executes all Atomics at L1 (variable set to 0; default)
   // Unique Near executes Atomics at HNF for states I, SC, SD (set to 1)

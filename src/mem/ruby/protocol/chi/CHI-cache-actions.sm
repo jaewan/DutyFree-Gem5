@@ -3423,23 +3423,27 @@ action(Finalize_UpdateCacheFromTBE, desc="") {
 
 action(Finalize_UpdateDirectoryFromTBE, desc="") {
   assert(is_valid(tbe));
-  State final := tbe.finalState;
-  if ((final == State:UD_RSC) || (final == State:SD_RSC) || (final == State:UC_RSC) ||
-      (final == State:SC_RSC) || (final == State:UC_RU)  || (final == State:UD_RU) ||
-      (final == State:UD_RSD) || (final == State:SD_RSD) || (final == State:RU) ||
-      (final == State:RSC)    || (final == State:RSD)    || (final == State:RUSD) ||
-      (final == State:RUSC)) {
-    DirEntry dir_entry := getDirEntry(address);
-    assert(is_valid(dir_entry));
-    assert(tbe.dir_sharers.count() > 0);
-    dir_entry.ownerExists := tbe.dir_ownerExists;
-    dir_entry.ownerIsExcl := tbe.dir_ownerIsExcl;
-    dir_entry.owner := tbe.dir_owner;
-    dir_entry.sharers := tbe.dir_sharers;
-  } else {
-    assert((tbe.dir_ownerExists == false) && tbe.dir_sharers.isEmpty());
-    if(directory.isTagPresent(address)) {
-      directory.deallocate(address);
+  // H3: skip directory tracking for STREAMING at HNF (coherence bypass)
+  // Allocate_DirEntry was already skipped, so no entry exists to update
+  if (!(is_HN && tbe.isStreaming)) {
+    State final := tbe.finalState;
+    if ((final == State:UD_RSC) || (final == State:SD_RSC) || (final == State:UC_RSC) ||
+        (final == State:SC_RSC) || (final == State:UC_RU)  || (final == State:UD_RU) ||
+        (final == State:UD_RSD) || (final == State:SD_RSD) || (final == State:RU) ||
+        (final == State:RSC)    || (final == State:RSD)    || (final == State:RUSD) ||
+        (final == State:RUSC)) {
+      DirEntry dir_entry := getDirEntry(address);
+      assert(is_valid(dir_entry));
+      assert(tbe.dir_sharers.count() > 0);
+      dir_entry.ownerExists := tbe.dir_ownerExists;
+      dir_entry.ownerIsExcl := tbe.dir_ownerIsExcl;
+      dir_entry.owner := tbe.dir_owner;
+      dir_entry.sharers := tbe.dir_sharers;
+    } else {
+      assert((tbe.dir_ownerExists == false) && tbe.dir_sharers.isEmpty());
+      if(directory.isTagPresent(address)) {
+        directory.deallocate(address);
+      }
     }
   }
 }
@@ -3451,8 +3455,11 @@ action(Deallocate_CacheBlock, desc="") {
 }
 
 action(Allocate_DirEntry, desc="") {
-  assert(directory.isTagPresent(address) == false);
-  directory.allocate(address);
+  // H3: skip directory entry allocation for STREAMING at HNF
+  if (!(is_HN && is_valid(tbe) && tbe.isStreaming)) {
+    assert(directory.isTagPresent(address) == false);
+    directory.allocate(address);
+  }
 }
 
 action(Deallocate_DirEntry, desc="") {

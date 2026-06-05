@@ -49,6 +49,8 @@ testcase/dirtax/dummy
 testcase/dutyfree/victim
 testcase/dutyfree/aggressor
 testcase/dutyfree/dummy
+testcase/dutyfree/aggressor_finite
+results/
 .DS_Store
 
 build/

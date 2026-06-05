@@ -493,7 +493,6 @@ class CHI_RNF(CHI_Node):
         l1Dcache_type,
         cache_line_size,
         l1Iprefetcher_type=None,
-        l1Dprefetcher_type=None,
     ):
         super().__init__(ruby_system)
 
@@ -579,7 +578,7 @@ class CHI_RNF(CHI_Node):
         return self._cpus
 
     # Adds a private L2 for each cpu
-    def addPrivL2Cache(self, cache_type, pf_type=None):
+    def addPrivL2Cache(self, cache_type):
         self._ll_cntrls = []
         for cpu in self._cpus:
             l2_cache = cache_type(
@@ -620,14 +619,12 @@ class CHI_RNF(CHI_Node):
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
                 L1DCache(size=options.l1d_size, assoc=options.l1d_assoc),
                 options.cacheline_size,
-                l1Dprefetcher_type=L1DIntelPF,
             )
             for cpu in cpus
         ]
         for rnf in rnfs:
             rnf.addPrivL2Cache(
                 L2Cache(size=options.l2_size, assoc=options.l2_assoc),
-                pf_type=L2IntelPF,
             )
         return rnfs
 

@@ -21,7 +21,7 @@ COMMON="$CFG
     --l3_size=2MiB   --l3_assoc=16
     --mem-type=SimpleMemory
     --mem-size=4GiB --cxl-mem-size=2GiB
-    --dram-latency=127ns --cxl-latency=218ns"
+    --dram-latency=150ns --cxl-latency=300ns"
 
 V=$ROOT/testcase/dirtax/victim
 A=$ROOT/testcase/dirtax/aggressor
@@ -38,7 +38,8 @@ def ticks(d):
     except: pass
     return None
 print(f"{'pct':<6}  {'vs_kb':>8}  {'slowdown':>10}")
-for pct, vs in [("25p",1024), ("50p",2048), ("75p",3072), ("100p",4096)]:
+for pct, vs in [("25p",1024),("40p",1638),("45p",1843),("50p",2048),
+                ("53p",2170),("55p",2252),("60p",2457),("75p",3072),("100p",4096)]:
     a = ticks(base/f"alone_{pct}")
     w = ticks(base/f"with_agg_{pct}")
     sl = f"{w/a:.3f}x" if a and w else "n/a"
@@ -50,27 +51,35 @@ run_all() {
     mkdir -p $ROOT/logs/intel_8462y_2cpu_dirtax
     echo "===== Intel 8462Y+ Directory Tax (2 CPU, LLC=4MiB) ====="
 
-    for pct in 25 50 75 100; do
-        vs=$((LLC_KIB * pct / 100))
+    # 4개씩 배치 실행
+    BATCH=()
+    for pct in 25 40 45 50 53 55 60 75 100; do
+        vs=$(( LLC_KIB * pct / 100 ))
         tag="${pct}p"
         iters=$((vs * 256))
-
-        $GEM5 --outdir=$ROOT/logs/intel_8462y_2cpu_dirtax/alone_${tag} \
-            $COMMON \
-            -c "$V;$D" \
-            --options "$vs $iters;" \
-            > $ROOT/logs/intel_8462y_2cpu_dirtax/alone_${tag}.log 2>&1 &
-        echo "  started: alone_${tag} [PID $!]"
-
-        $GEM5 --outdir=$ROOT/logs/intel_8462y_2cpu_dirtax/with_agg_${tag} \
-            $COMMON \
-            -c "$V;$A" \
-            --options "$vs $iters;$AGG_MB" \
-            > $ROOT/logs/intel_8462y_2cpu_dirtax/with_agg_${tag}.log 2>&1 &
-        echo "  started: with_agg_${tag} [PID $!]"
+        BATCH+=("$pct $vs $tag $iters")
     done
 
-    wait
+    i=0
+    while [ $i -lt ${#BATCH[@]} ]; do
+        for j in 0 1 2 3; do
+            idx=$((i + j))
+            [ $idx -ge ${#BATCH[@]} ] && break
+            read pct vs tag iters <<< "${BATCH[$idx]}"
+            $GEM5 --outdir=$ROOT/logs/intel_8462y_2cpu_dirtax/alone_${tag} \
+                $COMMON -c "$V;$D" --options "$vs $iters;" \
+                > $ROOT/logs/intel_8462y_2cpu_dirtax/alone_${tag}.log 2>&1 &
+            echo "  started: alone_${tag} [PID $!]"
+            $GEM5 --outdir=$ROOT/logs/intel_8462y_2cpu_dirtax/with_agg_${tag} \
+                $COMMON -c "$V;$A" --options "$vs $iters;$AGG_MB" \
+                > $ROOT/logs/intel_8462y_2cpu_dirtax/with_agg_${tag}.log 2>&1 &
+            echo "  started: with_agg_${tag} [PID $!]"
+        done
+        wait
+        echo "  batch done (pct $((i/1+25))~)"
+        i=$((i + 4))
+    done
+
     echo "Done."
     print_results
 }
