@@ -535,10 +535,7 @@ class CHI_RNF(CHI_Node):
             else:
                 l1i_pf = NULL
 
-            if l1Dprefetcher_type != None:
-                l1d_pf = l1Dprefetcher_type()
-            else:
-                l1d_pf = NULL
+            l1d_pf = NULL
 
             # cache controllers
             cpu.l1i = CHI_L1Controller(
@@ -584,10 +581,7 @@ class CHI_RNF(CHI_Node):
                 start_index_bit=self._block_size_bits, is_icache=False
             )
 
-            if pf_type != None:
-                l2_pf = pf_type()
-            else:
-                l2_pf = NULL
+            l2_pf = NULL
 
             cpu.l2 = CHI_L2Controller(self._ruby_system, l2_cache, l2_pf)
 

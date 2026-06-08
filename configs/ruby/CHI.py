@@ -51,13 +51,6 @@ def define_options(parser):
     )
     parser.add_argument("--enable-dvm", default=False, action="store_true")
     parser.add_argument(
-        "--streaming-coh-bypass",
-        default=False,
-        action="store_true",
-        dest="streaming_coh_bypass",
-        help="H3: skip HNF directory tracking for STREAMING lines",
-    )
-    parser.add_argument(
         "--cxl-mem-size",
         type=str,
         default="0",

@@ -2,13 +2,13 @@
 # Intel Xeon 8592+ (Emerald Rapids) Directory Tax — 8 CPU
 # LLC = 8 HNF × 5MiB = 40MiB
 # victim: 25%/50%/75%/100% of LLC
-# victim → DRAM 127ns, aggressors → CXL 218ns
+# victim → DRAM 150ns, aggressors → CXL 300ns
 
 ROOT=/home/naivete/DutyFree-Gem5-pakeunji
 GEM5=$ROOT/build_Intel_8592/gem5.opt
 CFG=$ROOT/configs/deprecated/example/se.py
-LLC_KIB=40960   # 8 × 5MiB
-AGG_MB=80.0    # LLC×2 = 40MiB×2
+LLC_KIB=40960    # 8 × 5MiB
+AGG_MB=160.0    # LLC×4 = 40MiB×4
 
 COMMON="$CFG
     --ruby --topology=Pt2Pt \
@@ -50,15 +50,16 @@ run_all() {
     mkdir -p $ROOT/logs/intel_8592_8cpu_dirtax
     echo "===== Intel 8592+ Directory Tax (8 CPU, LLC=40MiB) ====="
 
-    for pct in 25 40 45 50 53 55 60 75 100; do
+    batch=0
+    for pct in 50 53 60 25 40 45 55 75 100; do
         vs=$((LLC_KIB * pct / 100))
         tag="${pct}p"
-        iters=3145728
+        iters=20971520  # LLC_KIB(40960) × 512
 
         $GEM5 --outdir=$ROOT/logs/intel_8592_8cpu_dirtax/alone_${tag} \
             $COMMON \
             -c "$V;$D;$D;$D;$D;$D;$D;$D" \
-            --options "$vs $iters;;;;;;;;" \
+            --options "$vs $iters;;;;;;;" \
             > $ROOT/logs/intel_8592_8cpu_dirtax/alone_${tag}.log 2>&1 &
         echo "  started: alone_${tag} [PID $!]"
 
@@ -68,6 +69,12 @@ run_all() {
             --options "$vs $iters;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB" \
             > $ROOT/logs/intel_8592_8cpu_dirtax/with_agg_${tag}.log 2>&1 &
         echo "  started: with_agg_${tag} [PID $!]"
+
+        batch=$((batch + 2))
+        if [ $batch -ge 4 ]; then
+            wait
+            batch=0
+        fi
     done
 
     wait

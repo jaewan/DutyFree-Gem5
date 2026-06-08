@@ -341,13 +341,11 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DCT = True
         self.send_evictions = False
         # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
-        # alloc_on_readonce=True kept so streaming reads still fill LLC
-        # (required for Directory Tax baseline experiment).
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False
         self.alloc_on_readshared = False
         self.alloc_on_readunique = False
-        self.alloc_on_readonce = True
+        self.alloc_on_readonce = False
         self.alloc_on_writeback = True
         self.alloc_on_atomic = True
         self.dealloc_on_unique = True
@@ -536,10 +534,7 @@ class CHI_RNF(CHI_Node):
             else:
                 l1i_pf = NULL
 
-            if l1Dprefetcher_type != None:
-                l1d_pf = l1Dprefetcher_type()
-            else:
-                l1d_pf = NULL
+            l1d_pf = NULL
 
             # cache controllers
             cpu.l1i = CHI_L1Controller(
@@ -585,10 +580,7 @@ class CHI_RNF(CHI_Node):
                 start_index_bit=self._block_size_bits, is_icache=False
             )
 
-            if pf_type != None:
-                l2_pf = pf_type()
-            else:
-                l2_pf = NULL
+            l2_pf = NULL
 
             cpu.l2 = CHI_L2Controller(self._ruby_system, l2_cache, l2_pf)
 
