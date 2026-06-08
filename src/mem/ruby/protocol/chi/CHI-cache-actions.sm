@@ -239,6 +239,7 @@ action(AllocateTBE_PfRequest, desc="Allocate TBE for prefetch request") {
       out_msg.is_local_pf := true;
       out_msg.is_remote_pf := false;
       out_msg.txnId := max_outstanding_transactions;
+      out_msg.isStreaming := in_msg.isStreamingSet();
 
       if (in_msg.Type == RubyRequestType:LD) {
         out_msg.type := CHIRequestType:Load;

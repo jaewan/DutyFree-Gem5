@@ -50,6 +50,7 @@ testcase/dutyfree/victim
 testcase/dutyfree/aggressor
 testcase/dutyfree/dummy
 testcase/dutyfree/aggressor_finite
+testcase/dutyfree/streaming_pf_probe
 results/
 .DS_Store
 
