@@ -37,7 +37,7 @@ SA=$ROOT/testcase/dutyfree/aggressor    # STREAMING
 D=$ROOT/testcase/dirtax/dummy
 
 OUT=$ROOT/logs/intel_8592_4cpu_dirtax_streaming
-PCTS="25 40 45 50 53 55 60 75 100"
+PCTS="10 40 53 70 100"
 
 # 실행 중 백그라운드 작업이 MAXJOBS 이상이면 하나 끝날 때까지 대기
 throttle() { while (( $(jobs -rp | wc -l) >= MAXJOBS )); do wait -n; done; }
@@ -58,7 +58,7 @@ def ticks(d):
     return None
 def sl(a, w):
     return f"{w/a:.3f}" if a and w else ""
-PCTS = [25,40,45,50,53,55,60,75,100]
+PCTS = [10,40,53,70,100]
 rows = []
 print(f"{'pct':<6}  {'vs_kb':>6}  {'slowdown(with tax)':>18}  {'LLCbypass':>18}")
 for pct in PCTS:

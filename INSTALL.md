@@ -39,11 +39,12 @@ export PYTHON_CONFIG=python3.11-config
 
 ## Compile
 
-Build **both** targets (8462Y and 8592). The first run also initialises the
-kconfig build dirs (CHI protocol + `NUMBER_BITS_PER_SET=256`); later runs rebuild.
+Build gem5 (8462Y). The first run also initialises the kconfig build dir
+(CHI protocol + `NUMBER_BITS_PER_SET=256`). 8592 shares the same binary via a
+symlink (identical kconfig), so it is not rebuilt.
 
 ```bash
-./scripts/intel_compile.sh              # kconfig init (first run) + build 8462Y + 8592
+./scripts/intel_compile.sh              # kconfig init (first run) + build 8462Y, symlink 8592
 make -C testcase/dirtax                 # victim / aggressor (WB) / dummy
 make -C testcase/dutyfree               # STREAMING aggressor variant
 ```
@@ -56,12 +57,10 @@ and writes its TSV into `logs/<name>/results_<name>.tsv`.
 
 ```bash
 # 8462Y+ (Sapphire Rapids, 2.8GHz, LLC slice 2MiB)
-./scripts/intel_8462y_2cpu_dirtax_streaming.sh        # 2 CPU, agg = 4×LLC, full WSS sweep
-./scripts/intel_8462y_4cpu_dirtax_streaming.sh        # 4 CPU, agg = 4×LLC, full WSS sweep
+./scripts/intel_8462y_4cpu_dirtax_streaming.sh        # 4 CPU, agg = 4×LLC, 10/40/53/70/100% WSS sweep
 ./scripts/intel_8462y_8cpu_dirtax_streaming.sh        # 8 CPU, agg = 2×LLC, 53% WSS only
 
 # 8592+ (Emerald Rapids, 1.9GHz, LLC slice 5MiB)
-./scripts/intel_8592_2cpu_dirtax_streaming.sh
 ./scripts/intel_8592_4cpu_dirtax_streaming.sh
 ./scripts/intel_8592_8cpu_dirtax_streaming.sh
 
