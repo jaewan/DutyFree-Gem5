@@ -175,25 +175,51 @@ print(f"\n→ saved: {out}")
 PYEOF
 }
 
+# ── command guide ───────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") <CASE|all|results>
+
+  A B C D E F G H   run a single case
+  all               run every case A-H (up to 72 gem5 procs in parallel)
+  results           aggregate existing logs only -> $LOGBASE/results.tsv
+                    (no simulation; run after a case/all finishes)
+
+Prereqs (one-time):
+  ./scripts/amd_zen4c_compile.sh     # build build_amd_zen4_PF/gem5.opt
+  make -C testcase/dirtax            # victim / aggressor / dummy
+  make -C testcase/dutyfree          # STREAMING variants
+
+Examples:
+  $(basename "$0") B          # run case B, then:
+  $(basename "$0") results    # print the result tables
+EOF
+}
+
 # ── main ──────────────────────────────────────────────────────────────────────
-MODE="${1:-all}"
+MODE="${1:-}"
 
 case "$MODE" in
-    all)
-        for c in A B C D E F G H; do run_case "$c"; done
-        ;;
-    A|B|C|D|E|F|G|H)
-        run_case "$MODE"
-        ;;
-    results)
-        print_results; exit 0
-        ;;
-    *)
-        echo "Usage: $0 [all|A|B|C|D|E|F|results]"; exit 1
-        ;;
+    results)            print_results; exit 0 ;;
+    -h|--help|help|"")  usage; exit 0 ;;
+    all|A|B|C|D|E|F|G|H) ;;                       # fall through to run
+    *)                  echo "unknown argument: $MODE"; echo; usage; exit 1 ;;
 esac
 
+# prereq check (gem5 binary + testcase binaries)
+[ -x "$GEM5" ] || { echo "ERROR: gem5 not found: $GEM5"; echo "  -> ./scripts/amd_zen4c_compile.sh"; exit 1; }
+for b in dirtax/victim dirtax/aggressor dirtax/dummy \
+         dutyfree/victim dutyfree/aggressor dutyfree/dummy; do
+    [ -x "$ROOT/testcase/$b" ] || {
+        echo "ERROR: testcase binary missing: testcase/$b"
+        echo "  -> make -C testcase/dirtax && make -C testcase/dutyfree"; exit 1; }
+done
+
+if [ "$MODE" = "all" ]; then
+    for c in A B C D E F G H; do run_case "$c"; done
+else
+    run_case "$MODE"
+fi
+
 wait
-echo "All jobs done."
-echo ""
-print_results
+echo "All jobs done. Aggregate results with: $(basename "$0") results"
