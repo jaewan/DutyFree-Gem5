@@ -21,7 +21,7 @@ echo "=== Launching probe tests in parallel ==="
   configs/deprecated/example/se.py \
   --ruby --cpu-type=O3CPU --num-cpus=4 \
   --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-  --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
+  --mem-type=SimpleMemory --l1-latency=3 --l2-latency=14 \
   -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
   -o "524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8;524288 324011 512 r 8" \
   > logs/probe/private.log 2>&1 &
@@ -32,7 +32,7 @@ echo "  started: private  (log: logs/probe/private.log)"
   configs/deprecated/example/se.py \
   --ruby --cpu-type=O3CPU --num-cpus=4 \
   --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-  --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
+  --mem-type=SimpleMemory --l1-latency=3 --l2-latency=14 \
   -c testcase/latency/shared_bench \
   -o "262144 324011 4096 4" \
   > logs/probe/shared.log 2>&1 &

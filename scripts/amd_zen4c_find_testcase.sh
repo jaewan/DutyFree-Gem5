@@ -4,8 +4,8 @@
 # Victim:     16K / 32K / 64K / 128K / 512K / 1M / 2M / 3M / 3686K / 4M
 # Aggressor:  8M / 16M
 # PF:         oracle(32M) → 16M → 8M → 4M, assoc sweep
-# cpu-clock:  2.25GHz   (Zen 4c)
-# CXL:        DRAM=150ns victim, CXL=300ns aggressor
+# cpu-clock:  3.1GHz   (Zen 4c)
+# CXL:        DRAM=112ns victim, CXL=224ns aggressor
 # Conditions: victim_only / diff_L3 / same_L3   (baseline only)
 # Concurrency: max 32 gem5 processes at a time
 #
@@ -26,14 +26,14 @@ ITERS=3145728
 MAX_JOBS=32
 
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4
-  --cpu-clock=2.25GHz
-  --l1-latency=8 --l2-latency=39
+  --cpu-clock=3.1GHz
+  --l1-latency=3 --l2-latency=14
   --l1d_size=256KiB --l1d_assoc=8
   --l1i_size=64KiB  --l1i_assoc=8
   --l2_size=4MiB    --l2_assoc=16
   --mem-type=SimpleMemory
   --mem-size=2GiB --cxl-mem-size=1GiB
-  --dram-latency=150ns --cxl-latency=300ns"
+  --dram-latency=112ns --cxl-latency=224ns"
 
 # PF configurations: "pf_size assoc label"
 PF_CONFIGS=(
@@ -114,7 +114,7 @@ out  = base / "results.tsv"
 
 T = "\t"
 HDR = T.join(["label", "diff_L3", "same_L3", "target?"])
-lines = ["find_testcase (cpu=2.25GHz, DRAM=150ns, CXL=300ns)", HDR]
+lines = ["find_testcase (cpu=3.1GHz, DRAM=112ns, CXL=224ns)", HDR]
 
 for d in sorted(base.iterdir()):
     if not d.is_dir(): continue
