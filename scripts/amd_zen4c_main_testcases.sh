@@ -9,7 +9,7 @@
 #   gem5 L2 (4MiB)    = Zen 4c L3 shared CCX
 #
 # 조정값 (vs 기본):
-#   --cpu-clock=2.25GHz   (Zen 4c base, boost off)
+#   --cpu-clock=3.1GHz   (Zen 4c base, boost off)
 #   캐시 latency (ruby clock 2GHz = 0.5ns/cyc, 증분 입력):
 #     --l1-latency=8  → sim L1 누적 8cyc(4ns)   = 서버 L1·L2 평균
 #     --l2-latency=39 → sim L2 누적 8+39=47cyc(23.4ns) = 서버 L3
@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GEM5="${GEM5:-$ROOT/build_amd_zen4_PF/gem5.opt}"
 CFG="$ROOT/configs/deprecated/example/se.py"
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
-  --cpu-clock=2.25GHz \
+  --cpu-clock=3.1GHz \
   --l1-latency=8 --l2-latency=39 \
   --l1d_size=256KiB --l1d_assoc=8 \
   --l1i_size=64KiB  --l1i_assoc=8 \
