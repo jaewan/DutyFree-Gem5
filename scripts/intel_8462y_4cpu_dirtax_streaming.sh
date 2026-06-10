@@ -16,7 +16,7 @@ CFG=$ROOT/configs/deprecated/example/se.py
 LLC_KIB=8192        # 4 × 2MiB
 AGG_MB=32.0         # 4 × LLC(total)
 ITERS=4194304       # max_vs(8192KiB) × 256 × 2 passes
-MAXJOBS=4           # 한 번에 최대 4개 (두 스크립트 동시 실행 대비)
+MAXJOBS=15          # 15 job(5 WSS × 3 run)을 한꺼번에 전부 실행
 
 COMMON="$CFG
     --ruby --topology=Pt2Pt \
