@@ -45,8 +45,16 @@ symlink (identical kconfig), so it is not rebuilt.
 
 ```bash
 ./scripts/intel_compile.sh              # kconfig init (first run) + build 8462Y, symlink 8592
-make -C testcase/dirtax                 # victim / aggressor (WB) / dummy
-make -C testcase/dutyfree               # STREAMING aggressor variant
+make -C testcase                        # build all testcases (dirtax/dutyfree/coherence/latency)
+```
+
+## Sanity check (optional)
+
+Smoke-test the build + CHI protocol on both platforms (hello + coherence tests):
+
+```bash
+./scripts/intel_basic_test.sh           # runs on 8462Y + 8592
+# logs: logs/intel_basic_{8462y,8592}/  — look for "Exiting @ tick" / "Hello"
 ```
 
 ## Run
