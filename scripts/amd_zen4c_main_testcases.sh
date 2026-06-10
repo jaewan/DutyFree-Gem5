@@ -1,33 +1,37 @@
 #!/usr/bin/env bash
 # test_cxl_zen4c_tuned.sh — Zen 4c latency 최대한 반영한 CXL 실험
 #
-# 가정: victim(CPU0) → DRAM 75ns (pool 0)
-#       aggressor(CPU1-3) → CXL 200ns (pool 1)
+# 가정: victim(CPU0) → DRAM 150ns (pool 0)
+#       aggressor(CPU1-3) → CXL 300ns (pool 1)
 #
 # Zen 4c 매핑:
 #   gem5 L1 (256KiB)  = Zen 4c L1(32KB) + L2(1MB) 통합 private
 #   gem5 L2 (4MiB)    = Zen 4c L3 shared CCX
 #
 # 조정값 (vs 기본):
-#   --cpu-clock=3.1GHz   (Zen 4c 실제 클럭)
-#   --l2-latency=40      (L3 ~40ns at 1GHz sys-clock, 기본값 9)
-#   DRAM=75ns, CXL=200ns (실제 하드웨어 그대로)
+#   --cpu-clock=2.25GHz   (Zen 4c base, boost off)
+#   캐시 latency (ruby clock 2GHz = 0.5ns/cyc, 증분 입력):
+#     --l1-latency=8  → sim L1 누적 8cyc(4ns)   = 서버 L1·L2 평균
+#     --l2-latency=39 → sim L2 누적 8+39=47cyc(23.4ns) = 서버 L3
+#   DRAM=150ns, CXL=300ns (절대 ns)
 #
 # Usage: ./test_cxl_zen4c_tuned.sh [all|A|B|C|D|E|F|G|results]
 
 set -e
 
-ROOT=/home/naivete/DutyFree-Gem5-pakeunji
-GEM5="$ROOT/build_amd_zen4_PF_CXL_latency/gem5.opt"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GEM5="${GEM5:-$ROOT/build_amd_zen4_PF/gem5.opt}"
 CFG="$ROOT/configs/deprecated/example/se.py"
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
-  --cpu-clock=3.1GHz \
+  --cpu-clock=2.25GHz \
+  --l1-latency=8 --l2-latency=39 \
   --l1d_size=256KiB --l1d_assoc=8 \
   --l1i_size=64KiB  --l1i_assoc=8 \
   --mem-type=SimpleMemory \
   --mem-size=2GiB --cxl-mem-size=1GiB \
-  --dram-latency=75ns --cxl-latency=200ns"
+  --dram-latency=150ns --cxl-latency=300ns"
 LOGBASE="$ROOT/logs/main_cases"
+export LOGBASE   # print_results의 python heredoc에서 참조
 
 # ── 케이스 정의 ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
@@ -100,6 +104,7 @@ run_case() {
 # ── 결과 출력 ─────────────────────────────────────────────────────────────────
 print_results() {
 python3 - << 'PYEOF'
+import os
 from pathlib import Path
 
 def stat(p, key):
@@ -118,7 +123,7 @@ def sv(c, v):   return f"{c/v:.3f}" if c and v else ""
 def si(v):      return f"{int(v)}"  if v is not None else ""
 
 T = "\t"
-base = Path("/home/naivete/DutyFree-Gem5-pakeunji/logs/main_cases")
+base = Path(os.environ["LOGBASE"])
 out  = base / "results.tsv"
 CASES = {
     "A (pf8m/a128)":  "v3m_a16m_pf8m_a128_L2=4M",

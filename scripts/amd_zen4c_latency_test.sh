@@ -7,131 +7,136 @@
 #   L2:  N=524288  (2MB  << 16MB L2),   iters=512,   flush=262144
 #   MEM: N=4194304 (16MB >= 16MB L2),   iters=2,     flush=N
 
+# repo 루트 기준으로 실행 (어느 디렉토리에서 호출하든 동작)
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+GEM5="${GEM5:-$ROOT/build_amd_zen4_PF/gem5.opt}"
+
 mkdir -p logs/latency
 
 echo "=== Launching latency tests ==="
 
 # ── L1 read ───────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_read_1t_m5out \
+"$GEM5" --outdir=logs/latency/l1_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "2048 1277 4096 r 0" \
     > logs/latency/l1_read_1t.log 2>&1 &
 echo "  started: l1_read_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_read_8t_m5out \
+"$GEM5" --outdir=logs/latency/l1_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0;2048 1277 4096 r 0" \
     > logs/latency/l1_read_8t.log 2>&1 &
 echo "  started: l1_read_8t"
 
 # ── L1 write ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_write_1t_m5out \
+"$GEM5" --outdir=logs/latency/l1_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "2048 1277 4096 w 0" \
     > logs/latency/l1_write_1t.log 2>&1 &
 echo "  started: l1_write_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l1_write_8t_m5out \
+"$GEM5" --outdir=logs/latency/l1_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0;2048 1277 4096 w 0" \
     > logs/latency/l1_write_8t.log 2>&1 &
 echo "  started: l1_write_8t"
 
 # ── L2 read ───────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_read_1t_m5out \
+"$GEM5" --outdir=logs/latency/l2_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "524288 324011 512 r 262144" \
     > logs/latency/l2_read_1t.log 2>&1 &
 echo "  started: l2_read_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_read_8t_m5out \
+"$GEM5" --outdir=logs/latency/l2_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144;524288 324011 128 r 262144" \
     > logs/latency/l2_read_8t.log 2>&1 &
 echo "  started: l2_read_8t"
 
 # ── L2 write ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_write_1t_m5out \
+"$GEM5" --outdir=logs/latency/l2_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "524288 324011 512 w 262144" \
     > logs/latency/l2_write_1t.log 2>&1 &
 echo "  started: l2_write_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/l2_write_8t_m5out \
+"$GEM5" --outdir=logs/latency/l2_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144;524288 324011 128 w 262144" \
     > logs/latency/l2_write_8t.log 2>&1 &
 echo "  started: l2_write_8t"
 
 # ── MEM read ──────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_1t_m5out \
+"$GEM5" --outdir=logs/latency/mem_read_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "4194304 2592089 1 r 4194304" \
     > logs/latency/mem_read_1t.log 2>&1 &
 echo "  started: mem_read_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_read_8t_m5out \
+"$GEM5" --outdir=logs/latency/mem_read_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304;4194304 2592089 1 r 4194304" \
     > logs/latency/mem_read_8t.log 2>&1 &
 echo "  started: mem_read_8t"
 
 # ── MEM write ─────────────────────────────────────────────────────────────
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_1t_m5out \
+"$GEM5" --outdir=logs/latency/mem_write_1t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=2 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c testcase/latency/latency_bench \
     -o "4194304 2592089 1 w 4194304" \
     > logs/latency/mem_write_1t.log 2>&1 &
 echo "  started: mem_write_1t"
 
-build_amd_zen4_PF/gem5.opt --outdir=logs/latency/mem_write_8t_m5out \
+"$GEM5" --outdir=logs/latency/mem_write_8t_m5out \
     configs/deprecated/example/se.py \
     --ruby --cpu-type=O3CPU --num-cpus=8 \
     --l1d_size=32KiB --l1d_assoc=8 --l1i_size=64KiB --l1i_assoc=8 --l2_size=16MiB --l2_assoc=16 \
-    --mem-type=SimpleMemory --l2-latency=9 \
+    --mem-type=SimpleMemory --l1-latency=8 --l2-latency=39 \
     -c "testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench;testcase/latency/latency_bench" \
     -o "4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304;4194304 2592089 1 w 4194304" \
     > logs/latency/mem_write_8t.log 2>&1 &

@@ -95,7 +95,11 @@ class CPCntrl(MOESI_AMD_4th_PF_CorePair_Controller, CntrlBase):
         self.sequencer1.coreid = 1
         self.sequencer1.is_cpu_sequencer = True
 
-        self.mandatory_queue_latency = 2
+        # L1 hit latency (= 모든 요청이 mandatory queue에서 내는 공통 지연).
+        # collapsed 매핑: sim L1 = 서버 L1+L2. ruby cycle 단위.
+        self.mandatory_queue_latency = options.l1_latency
+        # L2 hit 증분: protocol에서 L1 fill(f0_L2ToL1)에 추가되는 값.
+        # sim L2 누적 = mandatory_queue_latency + l2_hit_latency.
         self.l2_hit_latency = options.l2_latency
         self.llc_streaming_bypass = options.llc_streaming_bypass
         self.issue_latency = options.cpu_to_dir_latency
@@ -138,6 +142,9 @@ def define_options(parser):
         "--no-resource-stalls", action="store_false", default=True
     )
     parser.add_argument("--num-tbes", type=int, default=256)
+    # L1 hit latency = mandatory_queue_latency (ruby cycle). default 2 = 기존 동작 유지.
+    parser.add_argument("--l1-latency", type=int, default=2)
+    # L2 hit 증분 (ruby cycle). sim L2 누적 = l1-latency + l2-latency.
     parser.add_argument("--l2-latency", type=int, default=9)
     parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")

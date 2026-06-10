@@ -4,8 +4,8 @@
 # Victim:     16K / 32K / 64K / 128K / 512K / 1M / 2M / 3M / 3686K / 4M
 # Aggressor:  8M / 16M
 # PF:         oracle(32M) → 16M → 8M → 4M, assoc sweep
-# cpu-clock:  3.1GHz   (Zen 4c)
-# CXL:        DRAM=75ns victim, CXL=200ns aggressor
+# cpu-clock:  2.25GHz   (Zen 4c)
+# CXL:        DRAM=150ns victim, CXL=300ns aggressor
 # Conditions: victim_only / diff_L3 / same_L3   (baseline only)
 # Concurrency: max 32 gem5 processes at a time
 #
@@ -13,10 +13,11 @@
 
 set -e
 
-ROOT=/home/naivete/rerun_AMD_results/DutyFree-Gem5-pakeunji
-GEM5="$ROOT/build_amd_zen4_PF_CXL_latency/gem5.opt"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GEM5="${GEM5:-$ROOT/build_amd_zen4_PF/gem5.opt}"
 CFG="$ROOT/configs/deprecated/example/se.py"
 LOGBASE="$ROOT/logs/find_testcase"
+export LOGBASE   # print_results의 python heredoc에서 참조
 VICTIM="$ROOT/testcase/dirtax/victim"
 AGG="$ROOT/testcase/dirtax/aggressor"
 DUMMY="$ROOT/testcase/dirtax/dummy"
@@ -25,13 +26,14 @@ ITERS=3145728
 MAX_JOBS=32
 
 BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4
-  --cpu-clock=3.1GHz
+  --cpu-clock=2.25GHz
+  --l1-latency=8 --l2-latency=39
   --l1d_size=256KiB --l1d_assoc=8
   --l1i_size=64KiB  --l1i_assoc=8
   --l2_size=4MiB    --l2_assoc=16
   --mem-type=SimpleMemory
   --mem-size=2GiB --cxl-mem-size=1GiB
-  --dram-latency=75ns --cxl-latency=200ns"
+  --dram-latency=150ns --cxl-latency=300ns"
 
 # PF configurations: "pf_size assoc label"
 PF_CONFIGS=(
@@ -92,6 +94,7 @@ run_case() {
 
 print_results() {
 python3 - << 'PYEOF'
+import os
 from pathlib import Path
 
 def stat(p, key):
@@ -106,12 +109,12 @@ def stat(p, key):
 def ticks(p): return stat(p, "simTicks")
 def sv(c, v): return f"{c/v:.3f}" if c and v else ""
 
-base = Path("/home/naivete/rerun_AMD_results/DutyFree-Gem5-pakeunji/logs/find_testcase")
+base = Path(os.environ["LOGBASE"])
 out  = base / "results.tsv"
 
 T = "\t"
 HDR = T.join(["label", "diff_L3", "same_L3", "target?"])
-lines = ["find_testcase (cpu=3.1GHz, DRAM=75ns, CXL=200ns)", HDR]
+lines = ["find_testcase (cpu=2.25GHz, DRAM=150ns, CXL=300ns)", HDR]
 
 for d in sorted(base.iterdir()):
     if not d.is_dir(): continue
