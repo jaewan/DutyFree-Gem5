@@ -70,6 +70,15 @@ run_case() {
 
     echo "=== Case ${case_id}: ${label} (v=${v_kb}K agg=${agg_mb}M) ==="
 
+    # victim_only: aggressor 없음 → variant(baseline/pf/llc)와 무관하게 동일.
+    # 한 번만 돌려서 모든 variant의 slowdown 분모로 공유한다.
+    mkdir -p "${outbase}/victim_only"
+    $GEM5 --outdir="${outbase}/victim_only" $CFG $common \
+        -c "$ROOT/testcase/dirtax/victim;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/dummy;$ROOT/testcase/dirtax/dummy" \
+        --options "${v_kb} ${iters};;;" \
+        > "${outbase}/victim_only.log" 2>&1 &
+    echo "  started: victim_only [PID $!]"
+
     for variant in baseline pfbypass pfbypass_llc; do
         local vbin dbin extra
         case "$variant" in
@@ -78,13 +87,7 @@ run_case() {
             pfbypass_llc) vbin="dirtax";  dbin="dutyfree"; extra="--llc-streaming-bypass" ;;
         esac
         local d="${outbase}/${variant}"
-        mkdir -p "${d}/victim_only" "${d}/diff_L3" "${d}/same_L3"
-
-        $GEM5 --outdir="${d}/victim_only" $CFG $common $extra \
-            -c "$ROOT/testcase/${vbin}/victim;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/dummy" \
-            --options "${v_kb} ${iters};;;" \
-            > "${d}/victim_only.log" 2>&1 &
-        echo "  started: ${variant}/victim_only [PID $!]"
+        mkdir -p "${d}/diff_L3" "${d}/same_L3"
 
         $GEM5 --outdir="${d}/diff_L3" $CFG $common $extra \
             -c "$ROOT/testcase/${vbin}/victim;$ROOT/testcase/${dbin}/dummy;$ROOT/testcase/${dbin}/aggressor;$ROOT/testcase/${dbin}/dummy" \
@@ -142,11 +145,11 @@ lines.append("Table 1: Victim Slowdown")
 lines.append(HDR)
 for k, label in CASES.items():
     d = base / label
-    bvo=ticks(d/"baseline/victim_only"); pvo=ticks(d/"pfbypass/victim_only"); lvo=ticks(d/"pfbypass_llc/victim_only")
+    vo = ticks(d/"victim_only")   # variant 공통 분모 (한 번만 측정)
     lines.append(T.join([k,
-        sv(ticks(d/"baseline/diff_L3"), bvo),  sv(ticks(d/"baseline/same_L3"), bvo),
-        sv(ticks(d/"pfbypass/diff_L3"), pvo),  sv(ticks(d/"pfbypass/same_L3"), pvo),
-        sv(ticks(d/"pfbypass_llc/diff_L3"),lvo), sv(ticks(d/"pfbypass_llc/same_L3"),lvo)]))
+        sv(ticks(d/"baseline/diff_L3"), vo),  sv(ticks(d/"baseline/same_L3"), vo),
+        sv(ticks(d/"pfbypass/diff_L3"), vo),  sv(ticks(d/"pfbypass/same_L3"), vo),
+        sv(ticks(d/"pfbypass_llc/diff_L3"),vo), sv(ticks(d/"pfbypass_llc/same_L3"),vo)]))
 
 lines.append("")
 lines.append("Table 2: PF Replacement Count")
