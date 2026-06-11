@@ -16,7 +16,6 @@ CFG=$ROOT/configs/deprecated/example/se.py
 LLC_KIB=20480       # 4 × 5MiB
 AGG_MB=80.0         # 4 × LLC(total)
 ITERS=10485760      # max_vs(20480KiB) × 256 × 2 passes
-MAXJOBS=15          # 15 job(5 WSS × 3 run)을 한꺼번에 전부 실행
 
 COMMON="$CFG
     --ruby --topology=Pt2Pt \
@@ -28,7 +27,7 @@ COMMON="$CFG
     --l2_size=2MiB   --l2_assoc=16
     --l3_size=5MiB   --l3_assoc=20
     --mem-type=SimpleMemory
-    --mem-size=32GiB --cxl-mem-size=2GiB
+    --mem-size=512GiB --cxl-mem-size=64GiB
     --dram-latency=150ns --cxl-latency=300ns"
 
 V=$ROOT/testcase/dirtax/victim
@@ -38,9 +37,6 @@ D=$ROOT/testcase/dirtax/dummy
 
 OUT=$ROOT/logs/intel_8592_4cpu_dirtax_streaming
 PCTS="10 40 53 70 100"
-
-# 실행 중 백그라운드 작업이 MAXJOBS 이상이면 하나 끝날 때까지 대기
-throttle() { while (( $(jobs -rp | wc -l) >= MAXJOBS )); do wait -n; done; }
 
 print_results() {
 python3 - << 'PYEOF'
@@ -83,34 +79,24 @@ PYEOF
 
 run_all() {
     mkdir -p $OUT
-    echo "===== Intel 8592+ DirTax+STREAMING (4 CPU, LLC=20MiB, agg=4×LLC, max ${MAXJOBS} jobs) ====="
+    echo "===== Intel 8592+ DirTax+STREAMING (4 CPU, LLC=20MiB, agg=4×LLC) ====="
 
     for pct in $PCTS; do
         vs=$(( LLC_KIB * pct / 100 ))
         tag="${pct}p"
 
-        throttle
-        $GEM5 --outdir=$OUT/alone_${tag} \
-            $COMMON -c "$V;$D;$D;$D" --options "$vs $ITERS;;;" \
-            > $OUT/alone_${tag}.log 2>&1 &
-        echo "  started: alone_${tag} [PID $!]"
-
-        throttle
         $GEM5 --outdir=$OUT/with_agg_${tag} \
             $COMMON -c "$V;$A;$A;$A" --options "$vs $ITERS;$AGG_MB;$AGG_MB;$AGG_MB" \
             > $OUT/with_agg_${tag}.log 2>&1 &
         echo "  started: with_agg_${tag} [PID $!]"
 
-        throttle
         $GEM5 --outdir=$OUT/with_streaming_${tag} \
             $COMMON -c "$V;$SA;$SA;$SA" --options "$vs $ITERS;$AGG_MB;$AGG_MB;$AGG_MB" \
             > $OUT/with_streaming_${tag}.log 2>&1 &
         echo "  started: with_streaming_${tag} [PID $!]"
     done
 
-    wait
-    echo "Done."
-    print_results
+    echo "All launched. Use \"$0 results\" once jobs finish."
 }
 
 case "${1:-all}" in
