@@ -129,6 +129,9 @@ class DirCntrl(MOESI_AMD_4th_PF_Directory_Controller, CntrlBase):
         )
 
         self.number_of_TBEs = options.num_tbes
+        self.pf_streaming_bypass = getattr(
+            options, "pf_streaming_bypass", True
+        )
         self.ruby_system = ruby_system
 
         if options.recycle_latency:
@@ -148,12 +151,21 @@ def define_options(parser):
     parser.add_argument("--l2-latency", type=int, default=9)
     parser.add_argument("--pf-size", type=str, default="2MiB", dest="pf_size")
     parser.add_argument("--pf-assoc", type=int, default=16, dest="pf_assoc")
+    # H2 and H3 are independent opt-in hardware responses to the single OS
+    # STREAMING contract (isStreaming). Neither / either / both can be enabled.
+    parser.add_argument(
+        "--pf-streaming-bypass",
+        action="store_true",
+        default=False,
+        dest="pf_streaming_bypass",
+        help="H3: STREAMING lines skip ProbeFilter enrollment (no back-probes)",
+    )
     parser.add_argument(
         "--llc-streaming-bypass",
         action="store_true",
         default=False,
         dest="llc_streaming_bypass",
-        help="STREAMING lines bypass L2 (LLC): L1D <-> Memory only",
+        help="H2: STREAMING lines bypass L2 (LLC): L1D <-> Memory only",
     )
     parser.add_argument(
         "--cxl-mem-size",

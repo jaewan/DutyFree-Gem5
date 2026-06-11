@@ -44,6 +44,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
   CacheMemory * ProbeFilterMemory;
   Cycles response_latency := 5;
   bool inclusiveDir := "True";
+  bool pf_streaming_bypass := "False";
   Cycles to_memory_controller_latency := 1;
 
   // From the Cores
@@ -379,7 +380,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
       peek(requestNetwork_in, CPURequestMsg) {
         TBE tbe := TBEs.lookup(in_msg.addr);
         CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(in_msg.addr));
-        if (inclusiveDir && !in_msg.isStreaming && isNotPresentProbeFilter(in_msg.addr)) {
+        if (inclusiveDir && !(pf_streaming_bypass && in_msg.isStreaming) && isNotPresentProbeFilter(in_msg.addr)) {
             Addr victim := ProbeFilterMemory.cacheProbe(in_msg.addr);
             tbe := TBEs.lookup(victim);
             entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.lookup(victim));
@@ -879,7 +880,7 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   action(apf_allocateProbeFilterEntry, "apf", desc="Allocate probe filte entry") {
     peek(requestNetwork_in, CPURequestMsg) {
-      if (!in_msg.isStreaming) {
+      if (!(pf_streaming_bypass && in_msg.isStreaming)) {
         if (!ProbeFilterMemory.isTagPresent(address)) {
             assert(ProbeFilterMemory.cacheAvail(address));
             CacheEntry entry := static_cast(CacheEntry, "pointer", ProbeFilterMemory.allocate(address, new CacheEntry));
@@ -914,12 +915,14 @@ machine(MachineType:Directory, "AMD Baseline protocol")
 
   action(upf_updateProbeFilter, "upf", desc="") {
     peek(requestNetwork_in, CPURequestMsg) {
-      // STREAMING requests skip ProbeFilter enrollment to avoid back-probes
-      if (in_msg.isStreaming) {
+      // STREAMING requests skip ProbeFilter enrollment to avoid back-probes,
+      // gated by pf_streaming_bypass so H3 (PF bypass) can be toggled
+      // independently of H2 (llc_streaming_bypass).
+      if (pf_streaming_bypass && in_msg.isStreaming) {
         DPRINTF(RubySlicc, "PF_skip: STREAMING addr=%s requestor=%s\n",
                 address, in_msg.Requestor);
       }
-      if (!in_msg.isStreaming) {
+      if (!(pf_streaming_bypass && in_msg.isStreaming)) {
         DPRINTF(RubySlicc, "PF_enroll: NON-STREAMING addr=%s requestor=%s\n",
                 address, in_msg.Requestor);
         assert(ProbeFilterMemory.isTagPresent(address));

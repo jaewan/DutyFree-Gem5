@@ -79,12 +79,15 @@ run_case() {
         > "${outbase}/victim_only.log" 2>&1 &
     echo "  started: victim_only [PID $!]"
 
-    for variant in baseline pfbypass pfbypass_llc; do
+    # llcbypass(H2-only) 제외: diff_L3엔 보호할 공유 L3가 없어 PF churn만 증폭됨.
+    # 필요 시 아래 loop와 case에 llcbypass를 되살리면 됨.
+    for variant in baseline pfbypass pf_llc_bypass; do
         local vbin dbin extra
         case "$variant" in
-            baseline)    vbin="dirtax";   dbin="dirtax";   extra="" ;;
-            pfbypass)    vbin="dirtax";   dbin="dutyfree"; extra="" ;;
-            pfbypass_llc) vbin="dirtax";  dbin="dutyfree"; extra="--llc-streaming-bypass" ;;
+            baseline)      vbin="dirtax"; dbin="dirtax";   extra="" ;;
+            pfbypass)      vbin="dirtax"; dbin="dutyfree"; extra="--pf-streaming-bypass" ;;                          # H3
+          # llcbypass)     vbin="dirtax"; dbin="dutyfree"; extra="--llc-streaming-bypass" ;;                         # H2 (disabled)
+            pf_llc_bypass) vbin="dirtax"; dbin="dutyfree"; extra="--pf-streaming-bypass --llc-streaming-bypass" ;;  # H2+H3
         esac
         local d="${outbase}/${variant}"
         mkdir -p "${d}/diff_L3" "${d}/same_L3"
@@ -119,13 +122,11 @@ def stat(p, key):
     except: pass
     return None
 
-def ticks(p):   return stat(p, "simTicks")
-def pf_repl(p): return stat(p, "system.ruby.Directory_Controller.PF_Repl")
-def l2_miss(p): return stat(p, "system.cp_cntrl0.L2cache.m_demand_misses")
-def sv(c, v):   return f"{c/v:.3f}" if c and v else ""
-def si(v):      return f"{int(v)}"  if v is not None else ""
+def ticks(p):    return stat(p, "simTicks")
+def run_done(p): return ticks(p) is not None    # stats.txt 존재 & sim 완료
+def pf_repl(p):  return stat(p, "system.ruby.Directory_Controller.PF_Repl")
+def l2_miss(p):  return stat(p, "system.cp_cntrl0.L2cache.m_demand_misses")
 
-T = "\t"
 base = Path(os.environ["LOGBASE"])
 out  = base / "results.tsv"
 CASES = {
@@ -138,42 +139,66 @@ CASES = {
     "G (B oracle)":   "v4m_a16m_pf32m_a128_L2=4M",
     "H (vic=4M pf16m)": "v4m_a16m_pf16m_a128_L2=4M",
 }
-HDR = T.join(["Case","bl/diff","bl/same","pf/diff","pf/same","pfl/diff","pfl/same"])
+# (subdir, column tag) — bl baseline / pf H3 / llc H2 / pfllc H2+H3
+# llcbypass(H2-only) 비활성: 실행 루프에서 제외됨. 되살리려면 아래 줄 주석 해제.
+VARIANTS = [("baseline","bl"), ("pfbypass","pf"),
+          # ("llcbypass","llc"),
+            ("pf_llc_bypass","pfllc")]
+PLACES   = [("diff_L3","diff"), ("same_L3","same")]
+HDR = ["Case"] + [f"{tag}/{pl}" for _, tag in VARIANTS for _, pl in PLACES]
 
-lines = []
-lines.append("Table 1: Victim Slowdown")
-lines.append(HDR)
-for k, label in CASES.items():
-    d = base / label
-    vo = ticks(d/"victim_only")   # variant 공통 분모 (한 번만 측정)
-    lines.append(T.join([k,
-        sv(ticks(d/"baseline/diff_L3"), vo),  sv(ticks(d/"baseline/same_L3"), vo),
-        sv(ticks(d/"pfbypass/diff_L3"), vo),  sv(ticks(d/"pfbypass/same_L3"), vo),
-        sv(ticks(d/"pfbypass_llc/diff_L3"),vo), sv(ticks(d/"pfbypass_llc/same_L3"),vo)]))
+MISS = "-"   # run not executed yet
 
-lines.append("")
-lines.append("Table 2: PF Replacement Count")
-lines.append(HDR)
-for k, label in CASES.items():
-    d = base / label
-    lines.append(T.join([k,
-        si(pf_repl(d/"baseline/diff_L3")),  si(pf_repl(d/"baseline/same_L3")),
-        si(pf_repl(d/"pfbypass/diff_L3")),  si(pf_repl(d/"pfbypass/same_L3")),
-        si(pf_repl(d/"pfbypass_llc/diff_L3")), si(pf_repl(d/"pfbypass_llc/same_L3"))]))
+def slowdown(d, sub, place):
+    p, vo = d/sub/place, ticks(d/"victim_only")
+    if not run_done(p) or not vo: return MISS
+    return f"{ticks(p)/vo:.3f}"
 
-lines.append("")
-lines.append("Table 3: Victim L2 Miss Count")
-lines.append(HDR)
-for k, label in CASES.items():
-    d = base / label
-    lines.append(T.join([k,
-        si(l2_miss(d/"baseline/diff_L3")),  si(l2_miss(d/"baseline/same_L3")),
-        si(l2_miss(d/"pfbypass/diff_L3")),  si(l2_miss(d/"pfbypass/same_L3")),
-        si(l2_miss(d/"pfbypass_llc/diff_L3")), si(l2_miss(d/"pfbypass_llc/same_L3"))]))
+def count(fn):
+    # run 완료 후 해당 stat이 없으면(=gem5가 0값 stat 생략) 0으로 표기.
+    def f(d, sub, place):
+        p = d/sub/place
+        if not run_done(p): return MISS
+        v = fn(p)
+        return "0" if v is None else f"{int(v)}"
+    return f
 
-content = "\n".join(lines)
-print(content)
-out.write_text(content + "\n")
+def build(cellfn):
+    rows = [HDR]
+    for k, label in CASES.items():
+        d = base / label
+        rows.append([k] + [cellfn(d, sub, place)
+                           for sub, _ in VARIANTS for place, _ in PLACES])
+    return rows
+
+TABLES = [
+    ("Table 1: Victim Slowdown (ticks / victim_only)", build(slowdown)),
+    ("Table 2: PF Replacement Count",                  build(count(pf_repl))),
+    ("Table 3: Victim L2 Miss Count",                  build(count(l2_miss))),
+]
+
+def pretty(rows):
+    w = [max(len(r[c]) for r in rows) for c in range(len(rows[0]))]
+    lines = []
+    for ri, r in enumerate(rows):
+        cells = [r[0].ljust(w[0])] + [r[c].rjust(w[c]) for c in range(1, len(r))]
+        lines.append("  ".join(cells))
+        if ri == 0:
+            lines.append("  ".join("-"*w[c] for c in range(len(r))))
+    return "\n".join(lines)
+
+# 화면: 정렬된 표
+for title, rows in TABLES:
+    print(f"\n{title}")
+    print(pretty(rows))
+
+# 파일: tab-separated (기계 판독용)
+tsv = []
+for title, rows in TABLES:
+    tsv.append(title)
+    tsv += ["\t".join(r) for r in rows]
+    tsv.append("")
+out.write_text("\n".join(tsv) + "\n")
 print(f"\n→ saved: {out}")
 PYEOF
 }
