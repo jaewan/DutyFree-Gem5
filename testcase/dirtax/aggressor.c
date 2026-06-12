@@ -16,8 +16,11 @@ int main(int argc, char *argv[])
     if (size_mb > MAX_MB) size_mb = MAX_MB;
     long N = (long)(size_mb * 1024.0 * 1024.0) / (long)sizeof(int);
 
-    volatile long sum = 0;
-    while (1)
+    static volatile long sink;
+    long sum = 0;
+    while (1) {
         for (long i = 0; i < N; i++)
             sum += arr[i];
+        sink = sum;  /* one store per scan keeps the read loop live */
+    }
 }

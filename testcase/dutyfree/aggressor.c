@@ -31,9 +31,11 @@ int main(int argc, char *argv[])
     /* Mark streaming region in gem5 page table before accessing */
     gem5_set_streaming((void*)arr, N * (long)sizeof(int));
 
-    volatile long sum = 0;
-    while(1) {
-    for (long i = 0; i < N; i++)
-        sum += arr[i];
+    static volatile long sink;
+    long sum = 0;
+    while (1) {
+        for (long i = 0; i < N; i++)
+            sum += arr[i];
+        sink = sum;  /* one store per scan keeps the read loop live */
     }
 }
