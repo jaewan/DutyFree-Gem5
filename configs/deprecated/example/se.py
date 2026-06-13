@@ -268,6 +268,21 @@ if args.ruby:
     Ruby.create_system(args, False, system)
     assert args.num_cpus == len(system.ruby._cpu_ports)
 
+    # Optional: enable RubySystem-level message-buffer randomization to break
+    # deterministic timing races that cause per-CPU BW asymmetry on slow
+    # cache configs (e.g., Intel 8592). Gated by env var to preserve default.
+    if os.environ.get("RUBY_RANDOMIZATION") == "1":
+        system.ruby.randomization = True
+
+    # Optional: re-seed gem5's RNG (used by MessageBuffer randomization etc).
+    # Different SEED values across runs give different stochastic trajectories
+    # for multi-seed variance experiments.
+    _seed = os.environ.get("SEED")
+    if _seed is not None:
+        import _m5.core
+
+        _m5.core.seedRandom(int(_seed))
+
     # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
     # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
     if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
