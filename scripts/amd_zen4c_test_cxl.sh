@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# test_cxl.sh — CXL/DRAM latency 분리 실험
+# test_cxl.sh — CXL/DRAM latency separation experiment
 #
-# 가정: victim(CPU0) → DRAM 75ns (pool 0)
+# assumption: victim(CPU0) → DRAM 75ns (pool 0)
 #       aggressor(CPU1-3) → CXL 200ns (pool 1)
 #
-# main_testcases.sh와 동일 케이스, 동일 구조.
-# 차이점: build_amd_zen4_PF_CXL_latency 바이너리 + CXL 옵션 추가
+# same cases and structure as main_testcases.sh.
+# difference: build_amd_zen4_PF_CXL_latency binary + added CXL options
 #
 # Usage: ./test_cxl.sh [all|A|B|C|D|E|F|results]   default=all
 
@@ -22,7 +22,7 @@ BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
   --dram-latency=75ns --cxl-latency=200ns"
 LOGBASE="$ROOT/logs/cxl_latency"
 
-# ── 케이스 정의 ───────────────────────────────────────────────────────────────
+# ── case definitions ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
   [A]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=8MiB  --pf-assoc=128"
   [B]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=8MiB  --pf-assoc=128"
@@ -43,7 +43,7 @@ declare -A CASE_LABEL=(
   [F]="v3m_a16m_pf32m_a128_L2=4M"
 )
 
-# ── 실행 함수 ─────────────────────────────────────────────────────────────────
+# ── run functions ─────────────────────────────────────────────────────────────────
 run_case() {
     local case_id="$1"
     local common="${CASE_COMMON[$case_id]}"
@@ -86,7 +86,7 @@ run_case() {
     echo ""
 }
 
-# ── 결과 출력 ─────────────────────────────────────────────────────────────────
+# ── results output ─────────────────────────────────────────────────────────────────
 print_results() {
 python3 - << 'PYEOF'
 from pathlib import Path

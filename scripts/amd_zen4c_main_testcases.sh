@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# main_cases.sh — 주요 케이스 재현 스크립트
+# main_cases.sh — script to reproduce the main cases
 #
 # ── PF tax + LLC contention (main cases) ──────────────────────────────────
 # Case A: v3m_a16m_pf8m/a128_L2=4M  (dirtax_v7/3MiB)          diff=2.272 same=3.772
@@ -26,7 +26,7 @@ BASE_COMMON="--ruby --cpu-type=O3CPU --num-cpus=4 \
   --mem-type=SimpleMemory"
 LOGBASE="$ROOT/logs/main_cases"
 
-# ── 케이스 정의 ───────────────────────────────────────────────────────────────
+# ── case definitions ───────────────────────────────────────────────────────────────
 declare -A CASE_COMMON=(
   [A]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=8MiB  --pf-assoc=128"
   [B]="$BASE_COMMON --l2_size=4MiB --l2_assoc=16 --pf-size=8MiB  --pf-assoc=128"
@@ -47,7 +47,7 @@ declare -A CASE_LABEL=(
   [F]="v3m_a16m_pf32m_a128_L2=4M"
 )
 
-# ── 실행 함수 ─────────────────────────────────────────────────────────────────
+# ── run functions ─────────────────────────────────────────────────────────────────
 run_case() {
     local case_id="$1"
     local common="${CASE_COMMON[$case_id]}"
@@ -90,7 +90,7 @@ run_case() {
     echo ""
 }
 
-# ── 결과 출력 ─────────────────────────────────────────────────────────────────
+# ── results output ─────────────────────────────────────────────────────────────────
 print_results() {
 python3 - << 'PYEOF'
 from pathlib import Path

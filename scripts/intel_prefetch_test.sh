@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prefetch ON/OFF × TimingSimpleCPU/O3CPU sweep with aggressor_finite
-# 4케이스: {pf_off, pf_on} × {timing, o3}
+# 4 cases: {pf_off, pf_on} × {timing, o3}
 # GEM5_STRIDE_PREFETCH=0 → prefetcher off, =1 (default) → StridePrefetcher on
 
 set -uo pipefail

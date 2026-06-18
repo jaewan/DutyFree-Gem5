@@ -58,6 +58,6 @@ grep "cp_cntrl2.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk
 grep "cp_cntrl3.probeToCore.m_msg_count" logs/probe/shared_m5out/stats.txt | awk '{print "CorePair3 received:  ", $2}'
 
 echo ""
-echo "# Step 5 후 예상:"
+echo "# expected after Step 5:"
 echo "#   Private: Avg ~1.0  (targeted to owning CorePair only)"
 echo "#   Shared:  Avg ~3.0  (all CorePairs share the data, broadcast = targeted)"
