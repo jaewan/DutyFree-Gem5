@@ -200,28 +200,8 @@ def create_system(
             m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
         ]
 
-    # CXL 1:1 mode: num-dirs=2 with CXL enabled → separate SNF per memory type
-    cxl_one_to_one = (
-        cxl_size_str not in ("0", "0B", "0GiB", "0MiB")
-        and options.num_dirs == 2
-    )
-
     hnf_list = [i for i in range(options.num_l3caches)]
-    if cxl_one_to_one:
-        # Split HNFs: first half handles DRAM range, second half handles CXL range
-        half = options.num_l3caches // 2
-        dram_hnfs = hnf_list[:half]
-        cxl_hnfs = hnf_list[half:]
-        CHI_HNF.createAddrRanges(
-            [system.mem_ranges[0]], system.cache_line_size.value, dram_hnfs
-        )
-        CHI_HNF.createAddrRanges(
-            [system.mem_ranges[1]], system.cache_line_size.value, cxl_hnfs
-        )
-    else:
-        CHI_HNF.createAddrRanges(
-            sysranges, system.cache_line_size.value, hnf_list
-        )
+    CHI_HNF.createAddrRanges(sysranges, system.cache_line_size.value, hnf_list)
 
     ruby_system.hnf = [
         CHI_HNF(i, ruby_system, HNFCache, None)
@@ -243,7 +223,6 @@ def create_system(
         CHI_SNF_MainMem(ruby_system, None, None)
         for i in range(options.num_dirs)
     ]
-    snf_cntrls = []
     for snf in ruby_system.snf:
         network_nodes.append(snf)
         network_cntrls.extend(snf.getNetworkSideControllers())
@@ -251,7 +230,6 @@ def create_system(
         mem_cntrls.extend(snf.getAllControllers())
         all_cntrls.extend(snf.getAllControllers())
         mem_dests.extend(snf.getAllControllers())
-        snf_cntrls.append(snf.getAllControllers())
 
     if len(other_memories) > 0:
         ruby_system.rom_snf = [
@@ -288,16 +266,8 @@ def create_system(
             rni.setDownstream(hnf_dests)
     if full_system:
         ruby_system.io_rni.setDownstream(hnf_dests)
-    if cxl_one_to_one and len(snf_cntrls) == 2:
-        # DRAM HNFs → SNF0, CXL HNFs → SNF1
-        half = options.num_l3caches // 2
-        for hnf in ruby_system.hnf[:half]:
-            hnf.setDownstream(snf_cntrls[0])
-        for hnf in ruby_system.hnf[half:]:
-            hnf.setDownstream(snf_cntrls[1])
-    else:
-        for hnf in ruby_system.hnf:
-            hnf.setDownstream(mem_dests)
+    for hnf in ruby_system.hnf:
+        hnf.setDownstream(mem_dests)
 
     # Setup data message size for all controllers
     for cntrl in all_cntrls:
