@@ -44,17 +44,17 @@ testcase/latency/latency_bench
 testcase/latency/shared_bench
 testcase/dirtax/victim
 testcase/dirtax/aggressor
-testcase/dirtax/aggressor_bw
+testcase/dirtax/aggressor_lowBW
 testcase/dirtax/aggressor_finite
-testcase/dirtax/aggressor_finite_bw
+testcase/dirtax/aggressor_finite_lowBW
 testcase/dirtax/dummy
 testcase/dutyfree/victim
 testcase/dutyfree/aggressor
-testcase/dutyfree/aggressor_bw
-testcase/dutyfree/dummy
+testcase/dutyfree/aggressor_lowBW
 testcase/dutyfree/aggressor_finite
-testcase/dutyfree/aggressor_finite_bw
+testcase/dutyfree/aggressor_finite_lowBW
 testcase/dutyfree/streaming_pf_probe
+testcase/dutyfree/dummy
 results/
 .DS_Store
 
