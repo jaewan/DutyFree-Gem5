@@ -61,16 +61,26 @@ def define_options(parser):
     parser.add_argument(
         "--dram-latency",
         type=str,
-        default="75ns",
+        default="150ns",
         dest="dram_latency",
         help="SimpleMemory latency for the DRAM range (pool 0)",
     )
     parser.add_argument(
         "--cxl-latency",
         type=str,
-        default="200ns",
+        default="300ns",
         dest="cxl_latency",
         help="SimpleMemory latency for the CXL range (pool 1)",
+    )
+    parser.add_argument(
+        "--split-mem-ctlr",
+        default=False,
+        action="store_true",
+        dest="split_mem_ctlr",
+        help="One SNF per memory range (DRAM SNF = iMC, CXL SNF = CXL root "
+        "port), each directly attached to its own memory device. HNFs (LLC) "
+        "stay shared and route per address. Models Intel SPR: shared CHA, "
+        "separate memory paths below it. Requires --num-dirs=1.",
     )
 
 
@@ -219,9 +229,18 @@ def create_system(
     # Notice we don't define a Directory_Controller type so we don't use
     # create_directories shared by other protocols.
 
+    # --split-mem-ctlr: one SNF per memory range (DRAM=iMC, CXL=CXL port).
+    # HNF creation above is untouched → LLC stays shared; each HNF routes to
+    # the owning SNF per address via mapAddressToDownstreamMachine (ranges
+    # are disjoint). Memory devices are bound in setup_memory_controllers.
+    n_snf = options.num_dirs
+    if getattr(options, "split_mem_ctlr", False):
+        if options.num_dirs != 1:
+            m5.fatal("--split-mem-ctlr requires --num-dirs=1")
+        n_snf = len(system.mem_ranges)
+
     ruby_system.snf = [
-        CHI_SNF_MainMem(ruby_system, None, None)
-        for i in range(options.num_dirs)
+        CHI_SNF_MainMem(ruby_system, None, None) for i in range(n_snf)
     ]
     for snf in ruby_system.snf:
         network_nodes.append(snf)
