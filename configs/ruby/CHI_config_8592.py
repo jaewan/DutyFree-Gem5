@@ -46,6 +46,7 @@ node to router binding. See configs/example/noc_config/2x4.py for an example.
 """
 
 import math
+import os
 
 import m5
 from m5.objects import *
@@ -611,6 +612,13 @@ class CHI_RNF(CHI_Node):
         class L2IntelPF(MultiPrefetcher):
             prefetchers = [StridePrefetcher(), TaggedPrefetcher()]
 
+        # PF_OFF_CORES="1,2,3": disable L1D/L2 prefetchers on those cpu_ids
+        _pfoff = {
+            int(x)
+            for x in os.environ.get("PF_OFF_CORES", "").split(",")
+            if x.strip()
+        }
+
         rnfs = [
             cls(
                 [cpu],
@@ -618,14 +626,20 @@ class CHI_RNF(CHI_Node):
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
                 L1DCache(size=options.l1d_size, assoc=options.l1d_assoc),
                 options.cacheline_size,
-                l1Dprefetcher_type=L1DIntelPF,
+                l1Dprefetcher_type=(
+                    None if int(cpu.cpu_id) in _pfoff else L1DIntelPF
+                ),
             )
             for cpu in cpus
         ]
         for rnf in rnfs:
             rnf.addPrivL2Cache(
                 L2Cache(size=options.l2_size, assoc=options.l2_assoc),
-                pf_type=L2IntelPF,
+                pf_type=(
+                    None
+                    if int(rnf.getCpus()[0].cpu_id) in _pfoff
+                    else L2IntelPF
+                ),
             )
         return rnfs
 
