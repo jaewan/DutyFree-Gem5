@@ -195,6 +195,13 @@ system = System(
 if numThreads > 1:
     system.multi_thread = True
 
+# Deeper IEW->commit time buffer: the default depth (5) overflows on
+# same-cycle load-completion bursts with large MSHR counts and aborts the
+# sim (timebuf.hh assert). Capacity only; no timing effect.
+if hasattr(system.cpu[0], "numROBEntries"):
+    for _cpu in system.cpu:
+        _cpu.forwardComSize = 256
+
 # Create a top-level voltage domain
 system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)
 
