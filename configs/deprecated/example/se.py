@@ -195,12 +195,19 @@ system = System(
 if numThreads > 1:
     system.multi_thread = True
 
-# Deeper IEW->commit time buffer: the default depth (5) overflows on
-# same-cycle load-completion bursts with large MSHR counts and aborts the
-# sim (timebuf.hh assert). Capacity only; no timing effect.
-if hasattr(system.cpu[0], "numROBEntries"):
+# O3 core sizing: SPR (Golden Cove) class defaults, env-overridable.
+if hasattr(system.cpu[0], "numROBEntries"):  # O3 only
     for _cpu in system.cpu:
+        # deeper IEW->commit buffer; default 5 overflows on same-cycle
+        # load-completion bursts with large MSHRs (timebuf.hh assert)
         _cpu.forwardComSize = 256
+        _cpu.numROBEntries = int(os.environ.get("ROBSZ", 512))
+        _cpu.LQEntries = int(os.environ.get("LQSZ", 192))
+        _cpu.SQEntries = int(os.environ.get("SQSZ", 114))
+        _cpu.instQueues = [IQUnit(numEntries=int(os.environ.get("IQSZ", 200)))]
+        _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
+        _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
+        _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
 
 # Create a top-level voltage domain
 system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)

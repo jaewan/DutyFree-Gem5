@@ -277,8 +277,8 @@ class CHI_L1Controller(Base_CHI_Cache_Controller):
         self.dealloc_on_shared = False
         self.dealloc_backinv_unique = True
         self.dealloc_backinv_shared = True
-        # Some reasonable default TBE params
-        self.number_of_TBEs = 16
+        # Some reasonable default TBE params (env L1_MSHR, unset=16)
+        self.number_of_TBEs = int(os.environ.get("L1_MSHR", 16))
         self.number_of_repl_TBEs = 16
         self.number_of_snoop_TBEs = 4
         self.number_of_DVM_TBEs = 16
@@ -315,8 +315,8 @@ class CHI_L2Controller(Base_CHI_Cache_Controller):
         self.dealloc_on_shared = False
         self.dealloc_backinv_unique = True
         self.dealloc_backinv_shared = True
-        # Some reasonable default TBE params
-        self.number_of_TBEs = 32
+        # L2 superqueue ~48 on SPR/EMR (env L2_MSHR)
+        self.number_of_TBEs = int(os.environ.get("L2_MSHR", 48))
         self.number_of_repl_TBEs = 32
         self.number_of_snoop_TBEs = 16
         self.number_of_DVM_TBEs = 1  # should not receive any dvm
@@ -354,8 +354,8 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.dealloc_on_shared = False
         self.dealloc_backinv_unique = False
         self.dealloc_backinv_shared = False
-        # Some reasonable default TBE params
-        self.number_of_TBEs = 32
+        # Some reasonable default TBE params (env HNF_MSHR, unset=32)
+        self.number_of_TBEs = int(os.environ.get("HNF_MSHR", 32))
         self.number_of_repl_TBEs = 32
         self.number_of_snoop_TBEs = 1  # should not receive any snoop
         self.number_of_DVM_TBEs = 1  # should not receive any dvm
@@ -510,12 +510,18 @@ class CHI_RNF(CHI_Node):
         self._cpus = cpus
 
         # First creates L1 caches and sequencers
+        # SEQ_OUT: sequencer max_outstanding_requests. The gem5 default
+        # (16, counted per load) throttles streaming MLP; keep it
+        # non-binding and let L1/L2 MSHRs be the real limit.
+        _seq_out = int(os.environ.get("SEQ_OUT", 1024))
         for cpu in self._cpus:
             cpu.inst_sequencer = RubySequencer(
                 version=Versions.getSeqId(), ruby_system=ruby_system
             )
             cpu.data_sequencer = RubySequencer(
-                version=Versions.getSeqId(), ruby_system=ruby_system
+                version=Versions.getSeqId(),
+                ruby_system=ruby_system,
+                max_outstanding_requests=_seq_out,
             )
 
             self._seqs.append(
@@ -607,11 +613,33 @@ class CHI_RNF(CHI_Node):
         # Intel SPR-like prefetcher (all 4 default-ON):
         # L1D: DCU Streamer (Stride) + DCU IP Prefetcher (DCPT)
         # L2:  MLC Streamer (Stride) + MLC Spatial/Adjacent (Tagged)
+        # PF_DEGREE(_L1/_L2): stride prefetch depth, 4KB-page bound (tuning)
+        _deg = int(os.environ.get("PF_DEGREE", 4))
+        _deg1 = int(os.environ.get("PF_DEGREE_L1", _deg))
+        _deg2 = int(os.environ.get("PF_DEGREE_L2", _deg))
+
+        # PF_PAGE: stride prefetcher page_bytes (diagnostic; 4KB is faithful)
+        _pfpage = os.environ.get("PF_PAGE", "4KiB")
+
         class L1DIntelPF(MultiPrefetcher):
-            prefetchers = [StridePrefetcher(), DCPTPrefetcher()]
+            prefetchers = [
+                StridePrefetcher(
+                    degree=_deg1,
+                    queue_size=max(32, _deg1 * 4),
+                    page_bytes=_pfpage,
+                ),
+                DCPTPrefetcher(),
+            ]
 
         class L2IntelPF(MultiPrefetcher):
-            prefetchers = [StridePrefetcher(), TaggedPrefetcher()]
+            prefetchers = [
+                StridePrefetcher(
+                    degree=_deg2,
+                    queue_size=max(32, _deg2 * 4),
+                    page_bytes=_pfpage,
+                ),
+                TaggedPrefetcher(),
+            ]
 
         # PF_OFF_CORES="1,2,3": disable L1D/L2 prefetchers on those cpu_ids
         _pfoff = {
@@ -775,11 +803,16 @@ class CHI_SNF_Base(CHI_Node):
             transitions_per_cycle=1024,
         )
 
+        # SNF_MSHR: number_of_TBEs, SNF_REQBUF: requestToMemory depth
+        self._cntrl.number_of_TBEs = int(os.environ.get("SNF_MSHR", 256))
+
         # The Memory_Controller implementation deallocates the TBE for
         # write requests when they are queue up to memory. The size of this
         # buffer must be limited to prevent unlimited outstanding writes.
-        self._cntrl.requestToMemory.buffer_size = (
-            int(self._cntrl.to_memory_controller_latency) + 1
+        self._cntrl.requestToMemory.buffer_size = int(
+            os.environ.get(
+                "SNF_REQBUF", int(self._cntrl.to_memory_controller_latency) + 1
+            )
         )
 
         self.connectController(self._cntrl)
