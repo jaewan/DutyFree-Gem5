@@ -55,6 +55,11 @@
 #include "params/X86ACPIMadtRecord.hh"
 #include "params/X86ACPIRSDP.hh"
 #include "params/X86ACPIRSDT.hh"
+#include "params/X86ACPISlit.hh"
+#include "params/X86ACPISrat.hh"
+#include "params/X86ACPISratMemoryAffinity.hh"
+#include "params/X86ACPISratProcessorAffinity.hh"
+#include "params/X86ACPISratRecord.hh"
 #include "params/X86ACPISysDescTable.hh"
 #include "params/X86ACPIXSDT.hh"
 #include "sim/sim_object.hh"
@@ -358,6 +363,138 @@ class MADT : public SysDescTable
 };
 
 } // namespace MADT
+
+namespace SRAT
+{
+
+// SRAT records share the MADT record shape: 1-byte type + 1-byte length
+// header followed by a type-specific fixed-size body (ACPI 6.x, ch. 5.2.16).
+class Record : public SimObject
+{
+  protected:
+    PARAMS(X86ACPISratRecord);
+
+    struct GEM5_PACKED Mem
+    {
+        uint8_t type = 0;
+        uint8_t length = 0;
+    };
+    static_assert(std::is_trivially_copyable_v<Mem>,
+            "Type not suitable for memcpy.");
+
+    uint8_t type;
+
+    virtual void prepareBuf(std::vector<uint8_t>& mem) const = 0;
+
+  public:
+    Record(const Params& p, uint8_t _type) : SimObject(p), type(_type) {}
+
+    std::vector<uint8_t>
+    prepare() const
+    {
+        std::vector<uint8_t> mem;
+        prepareBuf(mem);
+        return mem;
+    }
+};
+
+// Type 0: Processor Local APIC/SAPIC Affinity (16 bytes) — assigns one
+// CPU (by APIC ID) to a proximity domain.
+class ProcessorAffinity : public Record
+{
+  protected:
+    PARAMS(X86ACPISratProcessorAffinity);
+
+    struct GEM5_PACKED Mem : public Record::Mem
+    {
+        uint8_t proximityDomainLow = 0;
+        uint8_t apicId = 0;
+        uint32_t flags = 0;
+        uint8_t localSapicEid = 0;
+        uint8_t proximityDomainHigh[3] = {};
+        uint32_t clockDomain = 0;
+    };
+    static_assert(std::is_trivially_copyable_v<Mem>,
+            "Type not suitable for memcpy.");
+
+    void prepareBuf(std::vector<uint8_t>& mem) const override;
+
+  public:
+    ProcessorAffinity(const Params& p) : Record(p, 0) {}
+};
+
+// Type 1: Memory Affinity (40 bytes) — assigns one physical address
+// range to a proximity domain.
+class MemoryAffinity : public Record
+{
+  protected:
+    PARAMS(X86ACPISratMemoryAffinity);
+
+    struct GEM5_PACKED Mem : public Record::Mem
+    {
+        uint32_t proximityDomain = 0;
+        uint16_t _reserved1 = 0;
+        uint32_t baseAddrLow = 0;
+        uint32_t baseAddrHigh = 0;
+        uint32_t lengthLow = 0;
+        uint32_t lengthHigh = 0;
+        uint32_t _reserved2 = 0;
+        uint32_t flags = 0;
+        uint64_t _reserved3 = 0;
+    };
+    static_assert(std::is_trivially_copyable_v<Mem>,
+            "Type not suitable for memcpy.");
+
+    void prepareBuf(std::vector<uint8_t>& mem) const override;
+
+  public:
+    MemoryAffinity(const Params& p) : Record(p, 1) {}
+};
+
+class SRAT : public SysDescTable
+{
+  protected:
+    PARAMS(X86ACPISrat);
+
+    struct GEM5_PACKED Mem : public SysDescTable::Mem
+    {
+        uint32_t tableRevision = 0; // reserved, must be 1
+        uint8_t _reserved[8] = {};
+    };
+    static_assert(std::is_trivially_copyable_v<Mem>,
+            "Type not suitable for memcpy.");
+
+    std::vector<Record *> records;
+
+    Addr writeBuf(PortProxy& phys_proxy, Allocator& alloc,
+            std::vector<uint8_t>& mem) const override;
+
+  public:
+    SRAT(const Params &p);
+};
+
+} // namespace SRAT
+
+// SLIT (ACPI 6.x, ch. 5.2.17): 8-byte locality count followed by an NxN
+// byte matrix of relative distances (10 = local).
+class SLIT : public SysDescTable
+{
+  protected:
+    PARAMS(X86ACPISlit);
+
+    struct GEM5_PACKED Mem : public SysDescTable::Mem
+    {
+        uint64_t localityCount = 0;
+    };
+    static_assert(std::is_trivially_copyable_v<Mem>,
+            "Type not suitable for memcpy.");
+
+    Addr writeBuf(PortProxy& phys_proxy, Allocator& alloc,
+            std::vector<uint8_t>& mem) const override;
+
+  public:
+    SLIT(const Params &p);
+};
 
 } // namespace ACPI
 
