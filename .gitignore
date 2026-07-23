@@ -109,3 +109,5 @@ doc/html/
 
 logs/
 m5out*/
+.claude/settings.local.json
+testcase/tools/
