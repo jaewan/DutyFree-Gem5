@@ -196,18 +196,23 @@ def create_system(
     for m in other_memories:
         sysranges.append(m.range)
 
-    # Split mem_ranges into [DRAM, CXL] early so HNF/SNF creation uses correct ranges.
+    # Split mem_ranges into [DRAM..., CXL] early so HNF/SNF creation uses
+    # correct ranges. The CXL region is carved off the top of the *last*
+    # range: SE keeps the old [DRAM, CXL] split of its single range, and FS
+    # (which already has [0,3GB) + [4GiB,...) around the PCI hole) becomes
+    # [0,3GB) + [4GiB,X) + [X,...) matching the boot checkpoint's carve in
+    # fs.py, so physmem backing stores line up at restore.
     cxl_size_str = getattr(options, "cxl_mem_size", "0")
     if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
         from m5.util.convert import toMemorySize
 
         cxl_bytes = int(toMemorySize(cxl_size_str))
-        total_bytes = system.mem_ranges[0].size()
-        dram_bytes = total_bytes - cxl_bytes
-        assert dram_bytes > 0, "cxl-mem-size >= mem-size"
-        system.mem_ranges = [
-            m5.objects.AddrRange(0, size=dram_bytes),
-            m5.objects.AddrRange(dram_bytes, size=cxl_bytes),
+        last = system.mem_ranges[-1]
+        dram_bytes = last.size() - cxl_bytes
+        assert dram_bytes > 0, "cxl-mem-size >= last mem range"
+        system.mem_ranges = list(system.mem_ranges[:-1]) + [
+            m5.objects.AddrRange(last.start, size=dram_bytes),
+            m5.objects.AddrRange(last.start + dram_bytes, size=cxl_bytes),
         ]
 
     hnf_list = [i for i in range(options.num_l3caches)]

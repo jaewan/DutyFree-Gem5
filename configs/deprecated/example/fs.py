@@ -235,6 +235,68 @@ def build_test_system(np, isa: ISA):
 
         CacheConfig.config_cache(args, test_sys)
 
+        # Carve the CXL region off the top of the last memory range, after
+        # the E820 table was built (kernel keeps seeing one contiguous RAM
+        # region) but before memory controllers are instantiated, so the
+        # carved range gets its own controller and physmem backing store.
+        cxl_size_str = getattr(args, "cxl_mem_size", None)
+        if cxl_size_str and cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+            from m5.util.convert import toMemorySize
+
+            cxl_bytes = int(toMemorySize(cxl_size_str))
+            last = test_sys.mem_ranges[-1]
+            assert last.size() > cxl_bytes, "cxl-mem-size >= last mem range"
+            dram_size = last.size() - cxl_bytes
+            test_sys.mem_ranges = list(test_sys.mem_ranges[:-1]) + [
+                AddrRange(last.start, size=dram_size),
+                AddrRange(last.start + dram_size, size=cxl_bytes),
+            ]
+
+            # Describe the split to the guest via ACPI SRAT/SLIT: all CPUs
+            # and the DRAM ranges are proximity domain 0, the CXL range is
+            # a CPU-less domain 1. The kernel (CONFIG_ACPI_NUMA) then boots
+            # with node0 = CPUs+DRAM and node1 = memory-only CXL, so user
+            # code can bind allocations with numactl/mbind.
+            srat_records = []
+            for i in range(np):
+                srat_records.append(
+                    X86ACPISratProcessorAffinity(
+                        proximity_domain=0, apic_id=i, flags=1
+                    )
+                )
+            for r in test_sys.mem_ranges[:-1]:
+                srat_records.append(
+                    X86ACPISratMemoryAffinity(
+                        proximity_domain=0,
+                        base=r.start,
+                        size=r.size(),
+                        flags=1,
+                    )
+                )
+            cxl_range = test_sys.mem_ranges[-1]
+            srat_records.append(
+                X86ACPISratMemoryAffinity(
+                    proximity_domain=1,
+                    base=cxl_range.start,
+                    size=cxl_range.size(),
+                    flags=1,
+                )
+            )
+            srat = X86ACPISrat(
+                records=srat_records, oem_id="gem5", oem_table_id="srat"
+            )
+            cxl_dist = getattr(args, "cxl_numa_distance", 20)
+            slit = X86ACPISlit(
+                distances=[10, cxl_dist, cxl_dist, 10],
+                oem_id="gem5",
+                oem_table_id="slit",
+            )
+            adp = test_sys.workload.acpi_description_table_pointer
+            adp.rsdt.entries.append(srat)
+            adp.rsdt.entries.append(slit)
+            adp.xsdt.entries.append(srat)
+            adp.xsdt.entries.append(slit)
+
         MemConfig.config_mem(args, test_sys)
 
     if ObjectList.is_kvm_cpu(TestCPUClass) or ObjectList.is_kvm_cpu(
@@ -376,6 +438,24 @@ Options.addFSOptions(parser)
 # Add the ruby specific and protocol specific args
 if "--ruby" in sys.argv:
     Ruby.define_options(parser)
+else:
+    # CXL carve-out for classic-mode FS boots (Ruby/CHI defines its own
+    # --cxl-mem-size). Splitting the last mem range here keeps the physmem
+    # backing-store layout identical to a DRAM/CXL split restore config.
+    parser.add_argument(
+        "--cxl-mem-size",
+        action="store",
+        type=str,
+        default=None,
+        help="carve this much CXL memory from the top of the last mem range",
+    )
+    parser.add_argument(
+        "--cxl-numa-distance",
+        action="store",
+        type=int,
+        default=20,
+        help="SLIT distance from the CPU node to the CXL node (local=10)",
+    )
 
 args = parser.parse_args()
 

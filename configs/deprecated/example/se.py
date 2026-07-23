@@ -319,9 +319,18 @@ if args.ruby:
 
     # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
     # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
+    # ALL_CXL=1 forces every process onto the CXL pool (pool 1) instead — used
+    # for single-core CXL bandwidth/latency calibration where the sole process
+    # must allocate from the CXL range.
     if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
+        all_cxl = os.environ.get("ALL_CXL", "0") not in (
+            "0",
+            "",
+            "false",
+            "False",
+        )
         for i in range(np):
-            pool_id = 0 if i == 0 else 1
+            pool_id = 1 if all_cxl else (0 if i == 0 else 1)
             workload = system.cpu[i].workload
             if not isinstance(workload, list):
                 workload = [workload]

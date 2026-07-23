@@ -216,17 +216,19 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             else:
                 mem_ctrl = dram_intf
 
-            # Set per-range latency when CXL emulation is enabled
+            # Set per-range latency when CXL emulation is enabled. The CXL
+            # region is always the last range (see the carve in CHI.py);
+            # everything below it is DRAM, which in FS mode can be split
+            # into multiple ranges around the x86 PCI hole.
             if cxl_size_str not in ("0", "0B", "0GiB", "0MiB") and issubclass(
                 mem_type, m5.objects.SimpleMemory
             ):
-                range_idx = ri
-                if range_idx == 0:
+                if ri == len(system.mem_ranges) - 1:
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                else:
                     mem_ctrl.latency = getattr(
                         options, "dram_latency", "150ns"
                     )
-                else:
-                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
 
             if options.access_backing_store:
                 dram_intf.kvm_map = False
