@@ -208,6 +208,26 @@ if hasattr(system.cpu[0], "numROBEntries"):  # O3 only
         _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
         _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
         _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
+        # EMR (Raptor Cove) pipeline widths: 6-wide decode/alloc, 12 exec
+        # ports, 8-wide retire (gem5 MaxWidth=16 allows issue/wb 12).
+        _cpu.fetchWidth = int(os.environ.get("FETCHW", 6))
+        _cpu.decodeWidth = int(os.environ.get("DECODEW", 6))
+        _cpu.renameWidth = int(os.environ.get("RENAMEW", 6))
+        _cpu.dispatchWidth = int(os.environ.get("DISPATCHW", 6))
+        _cpu.issueWidth = int(os.environ.get("ISSUEW", 12))
+        _cpu.wbWidth = int(os.environ.get("WBW", 12))
+        _cpu.commitWidth = int(os.environ.get("COMMITW", 8))
+        # EMR-class branch predictor: TAGE-SC-L 64KB (closest to Intel's
+        # TAGE-like multi-level BP; gem5 default TournamentBP is far weaker).
+        # O3BP=tournament reverts to the gem5 default.
+        if os.environ.get("O3BP", "tage").lower() == "tage":
+            # v25 BP framework: TAGE_SC_L_64KB is a ConditionalPredictor,
+            # plugged into the BranchPredictor (BPredUnit) container.
+            _cpu.branchPred = BranchPredictor(
+                conditionalBranchPred=TAGE_SC_L_64KB(
+                    numThreads=Parent.numThreads
+                )
+            )
 
 # Create a top-level voltage domain
 system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)

@@ -40,6 +40,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
+import os
 import sys
 
 import m5
@@ -250,6 +251,43 @@ def build_test_system(np, isa: ISA):
                 obj.eventq_index = 0
             cpu.eventq_index = i + 1
         test_sys.kvm_vm = KvmVM()
+
+    # O3 core sizing: EMR (Raptor Cove) class, env-overridable. Keep in sync
+    # with the identical block in se.py (SE/FS same-machine contract).
+    # Placed AFTER the ruby/classic if-else so it applies to BOTH branches.
+    if hasattr(test_sys.cpu[0], "numROBEntries"):  # O3 only
+        for _cpu in test_sys.cpu:
+            # deeper IEW->commit buffer; default 5 overflows on same-cycle
+            # load-completion bursts with large MSHRs (timebuf.hh assert)
+            _cpu.forwardComSize = 256
+            _cpu.numROBEntries = int(os.environ.get("ROBSZ", 512))
+            _cpu.LQEntries = int(os.environ.get("LQSZ", 192))
+            _cpu.SQEntries = int(os.environ.get("SQSZ", 114))
+            _cpu.instQueues = [
+                IQUnit(numEntries=int(os.environ.get("IQSZ", 200)))
+            ]
+            _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
+            _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
+            _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
+            # EMR pipeline widths: 6-wide decode/alloc, 12 exec ports,
+            # 8-wide retire (gem5 MaxWidth=16 allows issue/wb 12).
+            _cpu.fetchWidth = int(os.environ.get("FETCHW", 6))
+            _cpu.decodeWidth = int(os.environ.get("DECODEW", 6))
+            _cpu.renameWidth = int(os.environ.get("RENAMEW", 6))
+            _cpu.dispatchWidth = int(os.environ.get("DISPATCHW", 6))
+            _cpu.issueWidth = int(os.environ.get("ISSUEW", 12))
+            _cpu.wbWidth = int(os.environ.get("WBW", 12))
+            _cpu.commitWidth = int(os.environ.get("COMMITW", 8))
+            # EMR-class branch predictor: TAGE-SC-L 64KB.
+            # O3BP=tournament reverts to the gem5 default TournamentBP.
+            if os.environ.get("O3BP", "tage").lower() == "tage":
+                # v25 BP framework: TAGE_SC_L_64KB is a ConditionalPredictor
+                # inside the BranchPredictor (BPredUnit) container.
+                _cpu.branchPred = BranchPredictor(
+                    conditionalBranchPred=TAGE_SC_L_64KB(
+                        numThreads=Parent.numThreads
+                    )
+                )
 
     return test_sys
 
