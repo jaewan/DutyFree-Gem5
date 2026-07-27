@@ -171,6 +171,7 @@ class X86ACPISratMemoryAffinity(X86ACPISratRecord):
 
 class X86ACPISrat(X86ACPISysDescTable):
     type = "X86ACPISrat"
+    cxx_header = "arch/x86/bios/acpi.hh"
     cxx_class = "gem5::X86ISA::ACPI::SRAT::SRAT"
 
     records = VectorParam.X86ACPISratRecord([], "SRAT affinity records")
@@ -180,6 +181,7 @@ class X86ACPISrat(X86ACPISysDescTable):
 # distances between proximity domains (10 = local).
 class X86ACPISlit(X86ACPISysDescTable):
     type = "X86ACPISlit"
+    cxx_header = "arch/x86/bios/acpi.hh"
     cxx_class = "gem5::X86ISA::ACPI::SLIT"
 
     distances = VectorParam.UInt8(
