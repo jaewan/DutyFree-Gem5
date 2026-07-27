@@ -45,9 +45,13 @@ case "$N" in
     2|4|8|16) ;;
     *) echo "num_cpus must be 2, 4, 8 or 16"; exit 1 ;;
 esac
-MEM=$(( 8 + 8 * N ))GiB          # DRAM 8GiB + CXL 8GiB per core
-CXL=$(( 8 * N ))GiB
-name=${2:-atomic_${N}cpu_cxl_hj}
+# Fixed layout for every core count: DRAM 128GiB + CXL 128GiB. SimpleMemory
+# backing store is lazily faulted, so only touched pages cost RAM (fact 1g +
+# hot table + kernel ~ a few GB); checkpoints stay sparse. Keeping it uniform
+# means the only per-run knob is the core count, and boot/restore always match.
+MEM=${MEM:-256GiB}
+CXL=${CXL:-128GiB}
+name=${2:-atomic_${N}cpu_hashjoin}
 
 mkdir -p $OUT/$name
 exec $GEM5 --outdir=$OUT/$name $FS \

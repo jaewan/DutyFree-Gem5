@@ -4,19 +4,15 @@
 # to the SE 8592 reference (CHI_config_8592.py, L1d 48K/12, L1i 32K/8, L2 2M/16,
 # L3 5M/20, O3 @1.9GHz) so SE and FS are the same machine.
 #
-# Memory layout MUST match the checkpoint's backing stores (boot mem-size/cxl,
-# i.e. DRAM 8GiB + CXL 8GiB per cpu):
-#   *2cpu_cxl*  : --mem-size=24GiB  --cxl-mem-size=16GiB
-#   *4cpu_cxl*  : --mem-size=40GiB  --cxl-mem-size=32GiB
-#   *8cpu_cxl*  : --mem-size=72GiB  --cxl-mem-size=64GiB
-#   *16cpu_cxl* : --mem-size=136GiB --cxl-mem-size=128GiB
-# num-l3caches = num-cpus (per 8592 dirtax convention -> LLC = ncpu*5MiB).
+# Memory layout MUST match the checkpoint's backing stores. Boot uses a fixed
+# DRAM 128GiB + CXL 128GiB (mem-size 256GiB) for every core count, so restore
+# uses the same; num-l3caches = num-cpus (LLC = ncpu*5MiB).
 # DRAM/CXL device latency defaults: dram 97ns / cxl 198ns -> e2e 111.0/199.0ns,
 # validated against real EMR (111.49/199.16, within 0.5%) on the EMR O3 core.
 # Override via DRAM_LAT/CXL_LAT env.
 #
 # Usage: fs_restore_chi_8592.sh <ckpt_name> <run_name> <script.rcS>
-#   e.g.: fs_restore_chi_8592.sh atomic_2cpu_cxl_hj hj_smoke_2c logs/fs_restore_chi/hashjoin_smoke.rcS
+#   e.g.: fs_restore_chi_8592.sh atomic_2cpu_hashjoin fs_w3_2c w3_2c.rcS
 
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,19 +33,14 @@ CXL_LAT=${CXL_LAT:-198ns}
 
 case "$1" in
     *16cpu*) N=16 ;;
-    *2cpu*) N=2 ;;
-    *4cpu*) N=4 ;;
-    *8cpu*) N=8 ;;
+    *8cpu*)  N=8 ;;
+    *4cpu*)  N=4 ;;
+    *2cpu*)  N=2 ;;
     *) echo "cannot infer num-cpus from $1"; exit 1 ;;
 esac
 
-case "$1" in
-    *16cpu_cxl*) MEMARGS="--mem-size=136GiB --cxl-mem-size=128GiB" ;;
-    *2cpu_cxl*) MEMARGS="--mem-size=24GiB --cxl-mem-size=16GiB" ;;
-    *4cpu_cxl*) MEMARGS="--mem-size=40GiB --cxl-mem-size=32GiB" ;;
-    *8cpu_cxl*) MEMARGS="--mem-size=72GiB --cxl-mem-size=64GiB" ;;
-    *)          MEMARGS="--mem-size=3GiB" ;;
-esac
+# Fixed layout, must equal boot (fs_boot_checkpoint.sh): DRAM 128 + CXL 128GiB.
+MEMARGS="--mem-size=${MEM:-256GiB} --cxl-mem-size=${CXL:-128GiB}"
 
 mkdir -p $OUT
 exec env RUBY_RANDOMIZATION=1 $GEM5 --outdir=$OUT $FS \
