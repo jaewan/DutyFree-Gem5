@@ -117,7 +117,11 @@ class Process : public SimObject
     // align to page boundaries, it will be expanded in either direction until
     // it does. This function will therefore set up *at least* the range
     // requested, and may configure more if necessary.
-    void allocateMem(Addr vaddr, int64_t size, bool clobber=false);
+    // pool_id >= 0 overrides the process-wide _memPoolId for this
+    // allocation (used by the m5 bindpool pseudo-inst for per-region
+    // DRAM/CXL placement in SE mode).
+    void allocateMem(Addr vaddr, int64_t size, bool clobber=false,
+                     int pool_id=-1);
 
     /**
      * Unmap the given virtual address range and deallocate any physical

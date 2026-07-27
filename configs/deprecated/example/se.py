@@ -329,12 +329,21 @@ if args.ruby:
             "false",
             "False",
         )
+        seen = set()
         for i in range(np):
             pool_id = 1 if all_cxl else (0 if i == 0 else 1)
             workload = system.cpu[i].workload
             if not isinstance(workload, list):
                 workload = [workload]
             for proc in workload:
+                # A single process shared across CPUs (pthread workloads,
+                # se.py maps multiprocesses[0] to every cpu) must keep the
+                # first assignment (DRAM pool): later CPUs would otherwise
+                # drag the shared heap/stack onto the CXL pool. Per-region
+                # CXL placement is done by the m5 bindpool op instead.
+                if id(proc) in seen:
+                    continue
+                seen.add(id(proc))
                 proc.mem_pool_id = pool_id
 
     system.ruby.clk_domain = SrcClockDomain(

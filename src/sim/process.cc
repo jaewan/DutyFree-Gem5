@@ -316,7 +316,7 @@ Process::drain()
 }
 
 void
-Process::allocateMem(Addr vaddr, int64_t size, bool clobber)
+Process::allocateMem(Addr vaddr, int64_t size, bool clobber, int pool_id)
 {
     const auto page_size = pTable->pageSize();
 
@@ -338,7 +338,8 @@ Process::allocateMem(Addr vaddr, int64_t size, bool clobber)
     }
 
     const int npages = divCeil(size, page_size);
-    const Addr paddr = seWorkload->allocPhysPages(npages, _memPoolId);
+    const Addr paddr = seWorkload->allocPhysPages(
+        npages, pool_id >= 0 ? pool_id : _memPoolId);
     const Addr pages_size = npages * page_size;
     pTable->map(page_addr, paddr, pages_size,
                 clobber ? EmulationPageTable::Clobber :

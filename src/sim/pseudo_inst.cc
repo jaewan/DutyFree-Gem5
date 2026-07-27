@@ -653,5 +653,45 @@ setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
             addr, size, marked_pages, total_pages);
 }
 
+void
+bindpool(ThreadContext *tc, Addr addr, uint64_t size, uint64_t pool)
+{
+    DPRINTF(PseudoInst,
+            "pseudo_inst::bindpool(addr=%#x, size=%#x, pool=%i)\n",
+            addr, size, pool);
+
+    auto *process = tc->getProcessPtr();
+    if (!process) {
+        warn("pseudo_inst::bindpool called outside SE mode, ignored\n");
+        return;
+    }
+
+    EmulationPageTable *pt = process->pTable;
+    const Addr page_size = pt->pageSize();
+    Addr va = pt->pageAlign(addr);
+    Addr end = pt->pageAlign(addr + size - 1) + page_size;
+
+    // Eagerly back still-unmapped pages from the requested pool. SE cannot
+    // migrate pages, so anything already touched keeps its original pool —
+    // call right after mmap, before first touch (the SE analogue of native
+    // mbind(MPOL_BIND)).
+    int alloc_pages = 0, skipped_pages = 0;
+    for (; va < end; va += page_size) {
+        if (pt->lookup(va)) {
+            skipped_pages++;
+        } else {
+            process->allocateMem(va, page_size, /*clobber=*/false,
+                                 static_cast<int>(pool));
+            alloc_pages++;
+        }
+    }
+    if (skipped_pages)
+        warn("bindpool: %d pages already mapped, left in original pool "
+             "(bind before first touch)\n", skipped_pages);
+    DPRINTF(PseudoInst,
+            "bindpool: addr=%#x size=%#x pool=%i -> %d allocated, "
+            "%d skipped\n", addr, size, pool, alloc_pages, skipped_pages);
+}
+
 } // namespace pseudo_inst
 } // namespace gem5
