@@ -16,6 +16,9 @@
 
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# gem5 SysPaths needs M5_PATH to point at an existing dir (kernel/disk are
+# absolute, so any existing dir works). Default so this runs unconfigured.
+export M5_PATH=${M5_PATH:-$HOME/.cache/gem5}
 GEM5=${GEM5:-$ROOT/build_Intel_8592/gem5.opt}
 FS=$ROOT/configs/deprecated/example/fs.py
 KERNEL=$ROOT/../linux/vmlinux
