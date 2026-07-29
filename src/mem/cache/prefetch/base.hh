@@ -121,6 +121,8 @@ class Base : public ClockedObject
         bool validPC;
         /** Whether this address targets the secure memory space. */
         bool secure;
+        /** Whether this address belongs to a STREAMING region (LLC bypass). */
+        bool streaming;
         /** Size in bytes of the request triggering this event */
         unsigned int size;
         /** Whether this event comes from a write request */
@@ -149,6 +151,15 @@ class Base : public ClockedObject
         bool isSecure() const
         {
             return secure;
+        }
+
+        /**
+         * Returns true if the address belongs to a STREAMING region.
+         * @return true if the address belongs to a STREAMING region.
+         */
+        bool isStreaming() const
+        {
+            return streaming;
         }
 
         /**

@@ -60,7 +60,8 @@ namespace prefetch
 Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
   : address(addr), pc(pkt->req->hasPC() ? pkt->req->getPC() : 0),
     requestorId(pkt->req->requestorId()), validPC(pkt->req->hasPC()),
-    secure(pkt->isSecure()), size(pkt->req->getSize()), write(pkt->isWrite()),
+    secure(pkt->isSecure()), streaming(pkt->req->isStreamingSet()),
+    size(pkt->req->getSize()), write(pkt->isWrite()),
     paddress(pkt->req->getPaddr()), cacheMiss(miss)
 {
     unsigned int req_size = pkt->req->getSize();
@@ -75,7 +76,8 @@ Base::PrefetchInfo::PrefetchInfo(PacketPtr pkt, Addr addr, bool miss)
 
 Base::PrefetchInfo::PrefetchInfo(PrefetchInfo const &pfi, Addr addr)
   : address(addr), pc(pfi.pc), requestorId(pfi.requestorId),
-    validPC(pfi.validPC), secure(pfi.secure), size(pfi.size),
+    validPC(pfi.validPC), secure(pfi.secure), streaming(pfi.streaming),
+    size(pfi.size),
     write(pfi.write), paddress(pfi.paddress), cacheMiss(pfi.cacheMiss),
     data(nullptr)
 {

@@ -114,6 +114,8 @@ void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
 void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
+void setstreaming(ThreadContext *tc, Addr addr, uint64_t size);
+void bindpool(ThreadContext *tc, Addr addr, uint64_t size, uint64_t pool);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -225,6 +227,14 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       case M5OP_PANIC:
         panic("M5 panic instruction called at %s\n", tc->pcState());
 
+      case M5OP_SET_STREAMING:
+        invokeSimcall<ABI>(tc, setstreaming);
+        return true;
+
+      case M5OP_BIND_POOL:
+        invokeSimcall<ABI>(tc, bindpool);
+        return true;
+
       case M5OP_WORK_BEGIN:
         invokeSimcall<ABI>(tc, workbegin);
         return true;
@@ -233,8 +243,6 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         invokeSimcall<ABI>(tc, workend);
         return true;
 
-      case M5OP_RESERVED1:
-      case M5OP_RESERVED2:
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:
       case M5OP_RESERVED5:

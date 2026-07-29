@@ -65,12 +65,14 @@ class L1ICache(RubyCache):
 
 
 class L1DCache(RubyCache):
-    dataAccessLatency = 2
+    # EMR 실측: ~2.65ns / ~5cy @ 1.9GHz → 5cy @ Ruby 2GHz = 2.5ns
+    dataAccessLatency = 4
     tagAccessLatency = 1
 
 
 class L2Cache(RubyCache):
-    dataAccessLatency = 6
+    # EMR 실측: ~9ns / ~16-20cy @ 1.9GHz → 18cy @ Ruby 2GHz = 9ns
+    dataAccessLatency = 16
     tagAccessLatency = 2
 
 
@@ -338,10 +340,12 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DMT = True
         self.enable_DCT = True
         self.send_evictions = False
-        # MOESI / Mostly inclusive for shared / Exclusive for unique
+        # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
+        # alloc_on_readonce=True kept so streaming reads still fill LLC
+        # (required for Directory Tax baseline experiment).
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False
-        self.alloc_on_readshared = True
+        self.alloc_on_readshared = False
         self.alloc_on_readunique = False
         self.alloc_on_readonce = True
         self.alloc_on_writeback = True
@@ -600,6 +604,15 @@ class CHI_RNF(CHI_Node):
 
     @classmethod
     def generate(cls, options, ruby_system, cpus):
+        # Intel SPR-like prefetcher (all 4 default-ON):
+        # L1D: DCU Streamer (Stride) + DCU IP Prefetcher (DCPT)
+        # L2:  MLC Streamer (Stride) + MLC Spatial/Adjacent (Tagged)
+        class L1DIntelPF(MultiPrefetcher):
+            prefetchers = [StridePrefetcher(), DCPTPrefetcher()]
+
+        class L2IntelPF(MultiPrefetcher):
+            prefetchers = [StridePrefetcher(), TaggedPrefetcher()]
+
         rnfs = [
             cls(
                 [cpu],
@@ -607,12 +620,14 @@ class CHI_RNF(CHI_Node):
                 L1ICache(size=options.l1i_size, assoc=options.l1i_assoc),
                 L1DCache(size=options.l1d_size, assoc=options.l1d_assoc),
                 options.cacheline_size,
+                l1Dprefetcher_type=L1DIntelPF,
             )
             for cpu in cpus
         ]
         for rnf in rnfs:
             rnf.addPrivL2Cache(
-                L2Cache(size=options.l2_size, assoc=options.l2_assoc)
+                L2Cache(size=options.l2_size, assoc=options.l2_assoc),
+                pf_type=L2IntelPF,
             )
         return rnfs
 

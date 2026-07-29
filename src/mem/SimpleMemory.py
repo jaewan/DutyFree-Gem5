@@ -51,7 +51,7 @@ class SimpleMemory(AbstractMemory):
     # The memory bandwidth limit default is set to 12.8GiB/s which is
     # representative of a x64 DDR3-1600 channel.
     bandwidth = Param.MemoryBandwidth(
-        "12.8GiB/s", "Combined read and write bandwidth"
+        "512GiB/s", "Combined read and write bandwidth"
     )
 
     def controller(self):

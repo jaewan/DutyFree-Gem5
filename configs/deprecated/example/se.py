@@ -195,6 +195,40 @@ system = System(
 if numThreads > 1:
     system.multi_thread = True
 
+# O3 core sizing: SPR (Golden Cove) class defaults, env-overridable.
+if hasattr(system.cpu[0], "numROBEntries"):  # O3 only
+    for _cpu in system.cpu:
+        # deeper IEW->commit buffer; default 5 overflows on same-cycle
+        # load-completion bursts with large MSHRs (timebuf.hh assert)
+        _cpu.forwardComSize = 256
+        _cpu.numROBEntries = int(os.environ.get("ROBSZ", 512))
+        _cpu.LQEntries = int(os.environ.get("LQSZ", 192))
+        _cpu.SQEntries = int(os.environ.get("SQSZ", 114))
+        _cpu.instQueues = [IQUnit(numEntries=int(os.environ.get("IQSZ", 200)))]
+        _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
+        _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
+        _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
+        # EMR (Raptor Cove) pipeline widths: 6-wide decode/alloc, 12 exec
+        # ports, 8-wide retire (gem5 MaxWidth=16 allows issue/wb 12).
+        _cpu.fetchWidth = int(os.environ.get("FETCHW", 6))
+        _cpu.decodeWidth = int(os.environ.get("DECODEW", 6))
+        _cpu.renameWidth = int(os.environ.get("RENAMEW", 6))
+        _cpu.dispatchWidth = int(os.environ.get("DISPATCHW", 6))
+        _cpu.issueWidth = int(os.environ.get("ISSUEW", 12))
+        _cpu.wbWidth = int(os.environ.get("WBW", 12))
+        _cpu.commitWidth = int(os.environ.get("COMMITW", 8))
+        # EMR-class branch predictor: TAGE-SC-L 64KB (closest to Intel's
+        # TAGE-like multi-level BP; gem5 default TournamentBP is far weaker).
+        # O3BP=tournament reverts to the gem5 default.
+        if os.environ.get("O3BP", "tage").lower() == "tage":
+            # v25 BP framework: TAGE_SC_L_64KB is a ConditionalPredictor,
+            # plugged into the BranchPredictor (BPredUnit) container.
+            _cpu.branchPred = BranchPredictor(
+                conditionalBranchPred=TAGE_SC_L_64KB(
+                    numThreads=Parent.numThreads
+                )
+            )
+
 # Create a top-level voltage domain
 system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)
 
@@ -267,6 +301,50 @@ for i in range(np):
 if args.ruby:
     Ruby.create_system(args, False, system)
     assert args.num_cpus == len(system.ruby._cpu_ports)
+
+    # Optional: enable RubySystem-level message-buffer randomization to break
+    # deterministic timing races that cause per-CPU BW asymmetry on slow
+    # cache configs (e.g., Intel 8592). Gated by env var to preserve default.
+    if os.environ.get("RUBY_RANDOMIZATION") == "1":
+        system.ruby.randomization = True
+
+    # Optional: re-seed gem5's RNG (used by MessageBuffer randomization etc).
+    # Different SEED values across runs give different stochastic trajectories
+    # for multi-seed variance experiments.
+    _seed = os.environ.get("SEED")
+    if _seed is not None:
+        import _m5.core
+
+        _m5.core.seedRandom(int(_seed))
+
+    # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
+    # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
+    # ALL_CXL=1 forces every process onto the CXL pool (pool 1) instead — used
+    # for single-core CXL bandwidth/latency calibration where the sole process
+    # must allocate from the CXL range.
+    if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
+        all_cxl = os.environ.get("ALL_CXL", "0") not in (
+            "0",
+            "",
+            "false",
+            "False",
+        )
+        seen = set()
+        for i in range(np):
+            pool_id = 1 if all_cxl else (0 if i == 0 else 1)
+            workload = system.cpu[i].workload
+            if not isinstance(workload, list):
+                workload = [workload]
+            for proc in workload:
+                # A single process shared across CPUs (pthread workloads,
+                # se.py maps multiprocesses[0] to every cpu) must keep the
+                # first assignment (DRAM pool): later CPUs would otherwise
+                # drag the shared heap/stack onto the CXL pool. Per-region
+                # CXL placement is done by the m5 bindpool op instead.
+                if id(proc) in seen:
+                    continue
+                seen.add(id(proc))
+                proc.mem_pool_id = pool_id
 
     system.ruby.clk_domain = SrcClockDomain(
         clock=args.ruby_clock, voltage_domain=system.voltage_domain

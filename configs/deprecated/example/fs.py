@@ -40,6 +40,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import argparse
+import os
 import sys
 
 import m5
@@ -234,6 +235,68 @@ def build_test_system(np, isa: ISA):
 
         CacheConfig.config_cache(args, test_sys)
 
+        # Carve the CXL region off the top of the last memory range, after
+        # the E820 table was built (kernel keeps seeing one contiguous RAM
+        # region) but before memory controllers are instantiated, so the
+        # carved range gets its own controller and physmem backing store.
+        cxl_size_str = getattr(args, "cxl_mem_size", None)
+        if cxl_size_str and cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+            from m5.util.convert import toMemorySize
+
+            cxl_bytes = int(toMemorySize(cxl_size_str))
+            last = test_sys.mem_ranges[-1]
+            assert last.size() > cxl_bytes, "cxl-mem-size >= last mem range"
+            dram_size = last.size() - cxl_bytes
+            test_sys.mem_ranges = list(test_sys.mem_ranges[:-1]) + [
+                AddrRange(last.start, size=dram_size),
+                AddrRange(last.start + dram_size, size=cxl_bytes),
+            ]
+
+            # Describe the split to the guest via ACPI SRAT/SLIT: all CPUs
+            # and the DRAM ranges are proximity domain 0, the CXL range is
+            # a CPU-less domain 1. The kernel (CONFIG_ACPI_NUMA) then boots
+            # with node0 = CPUs+DRAM and node1 = memory-only CXL, so user
+            # code can bind allocations with numactl/mbind.
+            srat_records = []
+            for i in range(np):
+                srat_records.append(
+                    X86ACPISratProcessorAffinity(
+                        proximity_domain=0, apic_id=i, flags=1
+                    )
+                )
+            for r in test_sys.mem_ranges[:-1]:
+                srat_records.append(
+                    X86ACPISratMemoryAffinity(
+                        proximity_domain=0,
+                        base=r.start,
+                        size=r.size(),
+                        flags=1,
+                    )
+                )
+            cxl_range = test_sys.mem_ranges[-1]
+            srat_records.append(
+                X86ACPISratMemoryAffinity(
+                    proximity_domain=1,
+                    base=cxl_range.start,
+                    size=cxl_range.size(),
+                    flags=1,
+                )
+            )
+            srat = X86ACPISrat(
+                records=srat_records, oem_id="gem5", oem_table_id="srat"
+            )
+            cxl_dist = getattr(args, "cxl_numa_distance", 20)
+            slit = X86ACPISlit(
+                distances=[10, cxl_dist, cxl_dist, 10],
+                oem_id="gem5",
+                oem_table_id="slit",
+            )
+            adp = test_sys.workload.acpi_description_table_pointer
+            adp.rsdt.entries.append(srat)
+            adp.rsdt.entries.append(slit)
+            adp.xsdt.entries.append(srat)
+            adp.xsdt.entries.append(slit)
+
         MemConfig.config_mem(args, test_sys)
 
     if ObjectList.is_kvm_cpu(TestCPUClass) or ObjectList.is_kvm_cpu(
@@ -250,6 +313,43 @@ def build_test_system(np, isa: ISA):
                 obj.eventq_index = 0
             cpu.eventq_index = i + 1
         test_sys.kvm_vm = KvmVM()
+
+    # O3 core sizing: EMR (Raptor Cove) class, env-overridable. Keep in sync
+    # with the identical block in se.py (SE/FS same-machine contract).
+    # Placed AFTER the ruby/classic if-else so it applies to BOTH branches.
+    if hasattr(test_sys.cpu[0], "numROBEntries"):  # O3 only
+        for _cpu in test_sys.cpu:
+            # deeper IEW->commit buffer; default 5 overflows on same-cycle
+            # load-completion bursts with large MSHRs (timebuf.hh assert)
+            _cpu.forwardComSize = 256
+            _cpu.numROBEntries = int(os.environ.get("ROBSZ", 512))
+            _cpu.LQEntries = int(os.environ.get("LQSZ", 192))
+            _cpu.SQEntries = int(os.environ.get("SQSZ", 114))
+            _cpu.instQueues = [
+                IQUnit(numEntries=int(os.environ.get("IQSZ", 200)))
+            ]
+            _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
+            _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
+            _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
+            # EMR pipeline widths: 6-wide decode/alloc, 12 exec ports,
+            # 8-wide retire (gem5 MaxWidth=16 allows issue/wb 12).
+            _cpu.fetchWidth = int(os.environ.get("FETCHW", 6))
+            _cpu.decodeWidth = int(os.environ.get("DECODEW", 6))
+            _cpu.renameWidth = int(os.environ.get("RENAMEW", 6))
+            _cpu.dispatchWidth = int(os.environ.get("DISPATCHW", 6))
+            _cpu.issueWidth = int(os.environ.get("ISSUEW", 12))
+            _cpu.wbWidth = int(os.environ.get("WBW", 12))
+            _cpu.commitWidth = int(os.environ.get("COMMITW", 8))
+            # EMR-class branch predictor: TAGE-SC-L 64KB.
+            # O3BP=tournament reverts to the gem5 default TournamentBP.
+            if os.environ.get("O3BP", "tage").lower() == "tage":
+                # v25 BP framework: TAGE_SC_L_64KB is a ConditionalPredictor
+                # inside the BranchPredictor (BPredUnit) container.
+                _cpu.branchPred = BranchPredictor(
+                    conditionalBranchPred=TAGE_SC_L_64KB(
+                        numThreads=Parent.numThreads
+                    )
+                )
 
     return test_sys
 
@@ -338,6 +438,24 @@ Options.addFSOptions(parser)
 # Add the ruby specific and protocol specific args
 if "--ruby" in sys.argv:
     Ruby.define_options(parser)
+else:
+    # CXL carve-out for classic-mode FS boots (Ruby/CHI defines its own
+    # --cxl-mem-size). Splitting the last mem range here keeps the physmem
+    # backing-store layout identical to a DRAM/CXL split restore config.
+    parser.add_argument(
+        "--cxl-mem-size",
+        action="store",
+        type=str,
+        default=None,
+        help="carve this much CXL memory from the top of the last mem range",
+    )
+    parser.add_argument(
+        "--cxl-numa-distance",
+        action="store",
+        type=int,
+        default=20,
+        help="SLIT distance from the CPU node to the CXL node (local=10)",
+    )
 
 args = parser.parse_args()
 

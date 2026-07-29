@@ -50,6 +50,38 @@ def define_options(parser):
         "Required for CustomMesh topology",
     )
     parser.add_argument("--enable-dvm", default=False, action="store_true")
+    parser.add_argument(
+        "--cxl-mem-size",
+        type=str,
+        default="0",
+        dest="cxl_mem_size",
+        help="Size of CXL memory range above DRAM (0=disabled). "
+        "Processes with mem_pool_id=1 allocate from this range.",
+    )
+    parser.add_argument(
+        "--dram-latency",
+        type=str,
+        default="150ns",
+        dest="dram_latency",
+        help="SimpleMemory latency for the DRAM range (pool 0)",
+    )
+    parser.add_argument(
+        "--cxl-latency",
+        type=str,
+        default="300ns",
+        dest="cxl_latency",
+        help="SimpleMemory latency for the CXL range (pool 1)",
+    )
+    parser.add_argument(
+        "--split-mem-ctlr",
+        default=False,
+        action="store_true",
+        dest="split_mem_ctlr",
+        help="One SNF per memory range (DRAM SNF = iMC, CXL SNF = CXL root "
+        "port), each directly attached to its own memory device. HNFs (LLC) "
+        "stay shared and route per address. Models Intel SPR: shared CHA, "
+        "separate memory paths below it. Requires --num-dirs=1.",
+    )
 
 
 def read_config_file(file):
@@ -102,9 +134,13 @@ def create_system(
     CHI_RNI_DMA = chi_defs.CHI_RNI_DMA
     CHI_RNI_IO = chi_defs.CHI_RNI_IO
 
-    class HNFCache(RubyCache):
-        dataAccessLatency = 10
-        tagAccessLatency = 2
+    # Use HNFCache from chi_defs if defined (per-platform latency), else default
+    if hasattr(chi_defs, "HNFCache"):
+        _HNFBase = chi_defs.HNFCache
+    else:
+        _HNFBase = RubyCache
+
+    class HNFCache(_HNFBase):
         size = options.l3_size
         assoc = options.l3_assoc
 
@@ -160,8 +196,28 @@ def create_system(
     for m in other_memories:
         sysranges.append(m.range)
 
+    # Split mem_ranges into [DRAM..., CXL] early so HNF/SNF creation uses
+    # correct ranges. The CXL region is carved off the top of the *last*
+    # range: SE keeps the old [DRAM, CXL] split of its single range, and FS
+    # (which already has [0,3GB) + [4GiB,...) around the PCI hole) becomes
+    # [0,3GB) + [4GiB,X) + [X,...) matching the boot checkpoint's carve in
+    # fs.py, so physmem backing stores line up at restore.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    if cxl_size_str not in ("0", "0B", "0GiB", "0MiB"):
+        from m5.util.convert import toMemorySize
+
+        cxl_bytes = int(toMemorySize(cxl_size_str))
+        last = system.mem_ranges[-1]
+        dram_bytes = last.size() - cxl_bytes
+        assert dram_bytes > 0, "cxl-mem-size >= last mem range"
+        system.mem_ranges = list(system.mem_ranges[:-1]) + [
+            m5.objects.AddrRange(last.start, size=dram_bytes),
+            m5.objects.AddrRange(last.start + dram_bytes, size=cxl_bytes),
+        ]
+
     hnf_list = [i for i in range(options.num_l3caches)]
     CHI_HNF.createAddrRanges(sysranges, system.cache_line_size.value, hnf_list)
+
     ruby_system.hnf = [
         CHI_HNF(i, ruby_system, HNFCache, None)
         for i in range(options.num_l3caches)
@@ -178,9 +234,18 @@ def create_system(
     # Notice we don't define a Directory_Controller type so we don't use
     # create_directories shared by other protocols.
 
+    # --split-mem-ctlr: one SNF per memory range (DRAM=iMC, CXL=CXL port).
+    # HNF creation above is untouched → LLC stays shared; each HNF routes to
+    # the owning SNF per address via mapAddressToDownstreamMachine (ranges
+    # are disjoint). Memory devices are bound in setup_memory_controllers.
+    n_snf = options.num_dirs
+    if getattr(options, "split_mem_ctlr", False):
+        if options.num_dirs != 1:
+            m5.fatal("--split-mem-ctlr requires --num-dirs=1")
+        n_snf = len(system.mem_ranges)
+
     ruby_system.snf = [
-        CHI_SNF_MainMem(ruby_system, None, None)
-        for i in range(options.num_dirs)
+        CHI_SNF_MainMem(ruby_system, None, None) for i in range(n_snf)
     ]
     for snf in ruby_system.snf:
         network_nodes.append(snf)

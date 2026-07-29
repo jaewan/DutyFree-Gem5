@@ -137,6 +137,58 @@ class X86ACPIMadtLAPICOverride(X86ACPIMadtRecord):
     address = Param.Addr(0, "64-bit Physical Address of Local APIC")
 
 
+# SRAT (System Resource Affinity Table): tells the OS which physical
+# address ranges and which CPUs belong to which NUMA proximity domain.
+class X86ACPISratRecord(SimObject):
+    type = "X86ACPISratRecord"
+    cxx_class = "gem5::X86ISA::ACPI::SRAT::Record"
+    cxx_header = "arch/x86/bios/acpi.hh"
+    abstract = True
+
+
+class X86ACPISratProcessorAffinity(X86ACPISratRecord):
+    type = "X86ACPISratProcessorAffinity"
+    cxx_header = "arch/x86/bios/acpi.hh"
+    cxx_class = "gem5::X86ISA::ACPI::SRAT::ProcessorAffinity"
+
+    proximity_domain = Param.UInt32(0, "proximity domain (NUMA node)")
+    apic_id = Param.UInt8(0, "local APIC ID of this processor")
+    flags = Param.UInt32(1, "bit 0: entry enabled")
+
+
+class X86ACPISratMemoryAffinity(X86ACPISratRecord):
+    type = "X86ACPISratMemoryAffinity"
+    cxx_header = "arch/x86/bios/acpi.hh"
+    cxx_class = "gem5::X86ISA::ACPI::SRAT::MemoryAffinity"
+
+    proximity_domain = Param.UInt32(0, "proximity domain (NUMA node)")
+    base = Param.Addr(0, "base physical address of this range")
+    size = Param.UInt64(0, "length of this range in bytes")
+    flags = Param.UInt32(
+        1, "bit 0: enabled, bit 1: hot-pluggable, bit 2: non-volatile"
+    )
+
+
+class X86ACPISrat(X86ACPISysDescTable):
+    type = "X86ACPISrat"
+    cxx_header = "arch/x86/bios/acpi.hh"
+    cxx_class = "gem5::X86ISA::ACPI::SRAT::SRAT"
+
+    records = VectorParam.X86ACPISratRecord([], "SRAT affinity records")
+
+
+# SLIT (System Locality Information Table): NxN matrix of relative
+# distances between proximity domains (10 = local).
+class X86ACPISlit(X86ACPISysDescTable):
+    type = "X86ACPISlit"
+    cxx_header = "arch/x86/bios/acpi.hh"
+    cxx_class = "gem5::X86ISA::ACPI::SLIT"
+
+    distances = VectorParam.UInt8(
+        [], "NxN locality distance matrix, row-major"
+    )
+
+
 # Root System Description Pointer Structure
 class X86ACPIRSDP(SimObject):
     type = "X86ACPIRSDP"

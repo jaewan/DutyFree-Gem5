@@ -668,6 +668,7 @@ void prepareRequest(TBE tbe, CHIRequestType type, CHIRequestMsg & out_msg) {
   out_msg.is_local_pf := false;
   out_msg.is_remote_pf := tbe.is_local_pf || tbe.is_remote_pf;
   out_msg.txnId := tbe.txnId;
+  out_msg.isStreaming := tbe.isStreaming;
 
   assert(tbe.txnId != static_cast(Addr, "value", -1));
 }
@@ -792,12 +793,14 @@ void printResources() {
 
 bool needCacheEntry(CHIRequestType req_type,
                     CacheEntry cache_entry, DirEntry dir_entry,
-                    bool is_prefetch) {
+                    bool is_prefetch, bool is_streaming) {
   // never allocates:
   // - if entry already valid
   // - if using DMT; the request is a Read*; and dir entry is invalid
+  // - if STREAMING: skip L3 fill entirely (H2 bypass)
   // oterwise follow config params
   if (is_valid(cache_entry) ||
+      (is_HN && is_streaming) ||
       (enable_DMT && is_invalid(dir_entry) &&
        ((req_type == CHIRequestType:ReadShared) ||
         (req_type == CHIRequestType:ReadUnique) ||

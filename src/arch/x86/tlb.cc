@@ -473,7 +473,8 @@ TLB::translate(const RequestPtr &req,
                         entry = insert(alignedVaddr, TlbEntry(
                                 p->pTable->pid(), alignedVaddr, pte->paddr,
                                 pte->flags & EmulationPageTable::Uncacheable,
-                                pte->flags & EmulationPageTable::ReadOnly),
+                                pte->flags & EmulationPageTable::ReadOnly,
+                                pte->flags & EmulationPageTable::Streaming),
                                 pcid);
                     }
                     DPRINTF(TLB, "Miss was serviced.\n");
@@ -506,6 +507,11 @@ TLB::translate(const RequestPtr &req,
             req->setPaddr(paddr);
             if (entry->uncacheable)
                 req->setFlags(Request::UNCACHEABLE | Request::STRICT_ORDER);
+            if (entry->streaming) {
+                req->setCacheCoherenceFlags(Request::STREAMING_BIT);
+                DPRINTF(TLB, "STREAMING_BIT set for vaddr %#x -> paddr %#x\n",
+                        vaddr, paddr);
+            }
         } else {
             //Use the address which already has segmentation applied.
             DPRINTF(TLB, "Paging disabled.\n");

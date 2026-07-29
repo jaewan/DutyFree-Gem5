@@ -41,31 +41,23 @@ typings
 # testcase build artifacts
 testcase/coherence/coherence_tests
 testcase/latency/latency_bench
+testcase/latency/shared_bench
 testcase/dirtax/victim
 testcase/dirtax/aggressor
+testcase/dirtax/aggressor_lowBW
+testcase/dirtax/aggressor_finite
+testcase/dirtax/aggressor_finite_lowBW
 testcase/dirtax/dummy
+testcase/dutyfree/victim
+testcase/dutyfree/aggressor
+testcase/dutyfree/aggressor_lowBW
+testcase/dutyfree/aggressor_finite
+testcase/dutyfree/aggressor_finite_lowBW
+testcase/dutyfree/streaming_pf_probe
+testcase/dutyfree/dummy
+results/
 .DS_Store
 
-완벽해요! ✅
-상태가 정확합니다:
-
-동료분의 README.md 받아짐 ("Gem5 Fork for DutyFree project." — 짧고 깔끔)
-renamed: 세 줄, Untracked 두 줄, 예상대로
-
-
-Step 7: .gitignore 보강
-이제 빌드 부산물, m5out, 에디터 파일 같은 게 실수로 커밋되지 않도록 .gitignore를 보강합니다.
-7-1. 현재 .gitignore 살짝 확인 (선택)
-원본 gem5의 .gitignore가 어떻게 되어 있는지 한 번 보세요:
-bashcat .gitignore
-build, *.pyc, m5out, parser.out 등이 이미 있을 거예요. 기본은 잘 잡혀 있지만 보강할 게 좀 있어요.
-7-2. 추가 항목 덧붙이기
-아래 명령을 그대로 복사해서 터미널에 붙여넣으세요. 이건 .gitignore 파일 끝에 새 항목들을 추가하는 거예요:
-bashcat >> .gitignore << 'EOF'
-
-# === DutyFree 프로젝트 추가분 ===
-
-# 빌드 출력 (gem5 기본은 'build'만 있어서 보강)
 build/
 build_*/
 *.o
@@ -75,7 +67,6 @@ build_*/
 *.d
 __pycache__/
 
-# gem5 실행 결과
 m5out/
 m5out_*/
 *.cpt/
@@ -85,19 +76,16 @@ config.json
 simout.txt
 simerr.txt
 
-# 시뮬레이션 로그/대용량 출력물
 *.log
 *.trace
 *.out.gz
 
-# 디스크 이미지/커널 (큰 파일 실수로 커밋 방지)
 *.img
 *.qcow2
 *.iso
 vmlinux*
 disk-image/
 
-# 에디터/IDE
 .vscode/
 .idea/
 *.swp
@@ -108,20 +96,18 @@ tags
 .tags
 cscope.*
 
-# Python 가상환경
 venv/
 .venv/
 env/
 
-# Doxygen
 src/doxygen/
 doc/html/
 
-# 패치/백업
 *.bak
 *.orig
 *.rej
 
-# 시뮬레이션 로그/결과
 logs/
 m5out*/
+.claude/settings.local.json
+testcase/tools/

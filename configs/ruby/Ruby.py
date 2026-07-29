@@ -154,10 +154,44 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
         # lowest bits above the block offset bits
         intlv_size = options.cacheline_size
 
-    # Sets bits to be used for interleaving.  Creates memory controllers
-    # attached to a directory controller.  A separate controller is created
-    # for each address range as the abstract memory can handle only one
-    # contiguous address range as of now.
+    cxl_size_str = getattr(options, "cxl_mem_size", "0")
+    cxl_enabled = cxl_size_str not in ("0", "0B", "0GiB", "0MiB")
+
+    # --split-mem-ctlr: dir_cntrls[i] owns mem_ranges[i] whole (no interleave,
+    # no crossbar) with its own memory device — DRAM SNF = iMC (dram-latency),
+    # CXL SNF = CXL root port (cxl-latency). Models Intel SPR separate memory
+    # paths below the shared CHA/LLC.
+    if (
+        getattr(options, "split_mem_ctlr", False)
+        and len(system.mem_ranges) > 1
+    ):
+        assert len(dir_cntrls) == len(system.mem_ranges)
+        for ri, (dir_cntrl, r) in enumerate(
+            zip(dir_cntrls, system.mem_ranges)
+        ):
+            mem_type = ObjectList.mem_list.get(options.mem_type)
+            dram_intf = MemConfig.create_mem_intf(
+                mem_type, r, 0, 0, intlv_size, options.xor_low_bit
+            )
+            if issubclass(mem_type, DRAMInterface):
+                mem_ctrl = m5.objects.MemCtrl(dram=dram_intf)
+            else:
+                mem_ctrl = dram_intf
+            if cxl_enabled and issubclass(mem_type, m5.objects.SimpleMemory):
+                if ri == 0:
+                    mem_ctrl.latency = getattr(
+                        options, "dram_latency", "150ns"
+                    )
+                else:
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+            if options.access_backing_store:
+                dram_intf.kvm_map = False
+            mem_ctrl.port = dir_cntrl.memory_out_port
+            dir_cntrl.addr_ranges = [dram_intf.range]
+            mem_ctrls.append(mem_ctrl)
+        system.mem_ctrls = mem_ctrls
+        return
+
     for dir_cntrl in dir_cntrls:
         crossbar = None
         if len(system.mem_ranges) > 1:
@@ -166,13 +200,14 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             dir_cntrl.memory_out_port = crossbar.cpu_side_ports
 
         dir_ranges = []
-        for r in system.mem_ranges:
+        for ri, r in enumerate(system.mem_ranges):
             mem_type = ObjectList.mem_list.get(options.mem_type)
+            intlv_bits = int(math.log(options.num_dirs, 2))
             dram_intf = MemConfig.create_mem_intf(
                 mem_type,
                 r,
                 index,
-                int(math.log(options.num_dirs, 2)),
+                intlv_bits,
                 intlv_size,
                 options.xor_low_bit,
             )
@@ -180,6 +215,20 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
                 mem_ctrl = m5.objects.MemCtrl(dram=dram_intf)
             else:
                 mem_ctrl = dram_intf
+
+            # Set per-range latency when CXL emulation is enabled. The CXL
+            # region is always the last range (see the carve in CHI.py);
+            # everything below it is DRAM, which in FS mode can be split
+            # into multiple ranges around the x86 PCI hole.
+            if cxl_size_str not in ("0", "0B", "0GiB", "0MiB") and issubclass(
+                mem_type, m5.objects.SimpleMemory
+            ):
+                if ri == len(system.mem_ranges) - 1:
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                else:
+                    mem_ctrl.latency = getattr(
+                        options, "dram_latency", "150ns"
+                    )
 
             if options.access_backing_store:
                 dram_intf.kvm_map = False
