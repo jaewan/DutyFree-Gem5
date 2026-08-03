@@ -377,6 +377,13 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         #   HNF_H3=1        -> STREAMING lines skip directory/SF enrollment
         self.sf_finite = bool(int(os.environ.get("HNF_SF_FINITE", 0)))
         self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
+        # Cross-guard: the finite-SF dir-allocation deferral (CheckSFFill) is
+        # incompatible with the DMT read pipeline (SendReadNoSnpDMT sequencing),
+        # and finite-SF misses often, firing the DMT branch constantly. Forgetting
+        # HNF_DMT=0 would silently exercise that untested combination and could
+        # corrupt results with no crash. Fail loudly instead.
+        assert not (self.sf_finite and self.enable_DMT), \
+            "finite SF (HNF_SF_FINITE=1) requires DMT off (HNF_DMT=0)"
         # Some reasonable default TBE params (env HNF_MSHR, unset=32)
         self.number_of_TBEs = int(os.environ.get("HNF_MSHR", 32))
         self.number_of_repl_TBEs = 32

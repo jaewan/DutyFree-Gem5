@@ -413,6 +413,16 @@ action(Initiate_Replacement, desc="") {
   if (initial == State:UD_RU) {
     tbe.dataBlk := cache_entry.DataBlk;
     tbe.dataBlkValid.fillMask();
+    // H3/B2 FIX: the HN block is the authoritative dirty copy for a UD_RU victim.
+    // copyCacheAndDir leaves dataValid=false; the mainline Global_Eviction path
+    // masks that via Initiate_Replacement_WB_BackInvalidate (unconditional WB),
+    // but the SF_Eviction path drains through MaintainCoherence, whose WB is
+    // gated on dataValid. Without this, an SF eviction of a UD_RU line whose
+    // upstream owner is CLEAN (replies SnpResp_I, no data) drops the dirty block
+    // silently after Deallocate_CacheBlock. Marking it valid makes MaintainCoherence
+    // write it back; a dirty-owner snoop (SnpRespData_I_PD) later overwrites it
+    // with the newer copy, so this is correct on both paths.
+    tbe.dataValid := true;
   }
 
   // model the initial tag array read
