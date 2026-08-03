@@ -279,6 +279,9 @@ class CHI_L1Controller(Base_CHI_Cache_Controller):
         self.alloc_on_readshared = True
         self.alloc_on_readunique = True
         self.alloc_on_readonce = True
+        # H3: participate in the STREAMING no-footprint bypass so streaming
+        # reads are issued as ReadOnce (no L1/L2 retention). Off unless HNF_H3=1.
+        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
         self.alloc_on_writeback = True
         self.alloc_on_atomic = False
         self.dealloc_on_unique = False
@@ -317,6 +320,9 @@ class CHI_L2Controller(Base_CHI_Cache_Controller):
         self.alloc_on_readshared = True
         self.alloc_on_readunique = True
         self.alloc_on_readonce = True
+        # H3: participate in the STREAMING no-footprint bypass so streaming
+        # reads are issued as ReadOnce (no L1/L2 retention). Off unless HNF_H3=1.
+        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
         self.alloc_on_writeback = True
         self.alloc_on_atomic = False
         self.dealloc_on_unique = False

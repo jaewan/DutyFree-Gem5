@@ -826,10 +826,14 @@ bool needCacheEntry(CHIRequestType req_type,
   // never allocates:
   // - if entry already valid
   // - if using DMT; the request is a Read*; and dir entry is invalid
-  // - if STREAMING: skip L3 fill entirely (H2 bypass)
+  // - if STREAMING: skip fill entirely.
+  //   * is_HN                      -> H2: HNF never fills L3 for streaming lines.
+  //   * enable_H3_streaming_bypass -> H3: L1/L2 don't retain streaming lines
+  //     either, so the read is issued as ReadOnce (no sharer recorded anywhere,
+  //     hence no later clean Evict/WB that the HNF would flag stale).
   // oterwise follow config params
   if (is_valid(cache_entry) ||
-      (is_HN && is_streaming) ||
+      ((is_HN || enable_H3_streaming_bypass) && is_streaming) ||
       (enable_DMT && is_invalid(dir_entry) &&
        ((req_type == CHIRequestType:ReadShared) ||
         (req_type == CHIRequestType:ReadUnique) ||
