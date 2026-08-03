@@ -55,6 +55,7 @@
 #include "base/output.hh"
 #include "cpu/base.hh"
 #include "cpu/thread_context.hh"
+#include "arch/generic/mmu.hh"
 #include "debug/Loader.hh"
 #include "debug/Quiesce.hh"
 #include "debug/WorkItems.hh"
@@ -646,6 +647,14 @@ setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
         if (entry) {
             entry->flags |= EmulationPageTable::Streaming;
             marked_pages++;
+        }
+    }
+    // TLB entries populated before this mark (e.g. by init/prefault writes)
+    // are stale and lack the Streaming flag; flush so re-translation observes it.
+    if (marked_pages) {
+        for (auto *thr : tc->getSystemPtr()->threads) {
+            if (thr && thr->getMMUPtr())
+                thr->getMMUPtr()->flushAll();
         }
     }
     DPRINTF(PseudoInst,

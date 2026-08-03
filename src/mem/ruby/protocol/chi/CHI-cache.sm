@@ -134,6 +134,17 @@ machine(MachineType:Cache, "Cache coherency protocol") :
   // H3: skip HNF directory tracking for STREAMING lines (coherence bypass).
   // When enabled, HNF does not register STREAMING lines as sharers, preventing
   // back-probes. Tradeoff: no DCT forwarding for multi-reader STREAMING.
+  // Inert unless the directory is finite (see sf_finite) -- skipping an
+  // allocation in a PerfectCacheMemory costs nothing.
+  // See H3_FINITE_SF_DESIGN.md, steps B1/B3.
+  bool enable_H3_streaming_bypass := "False";
+
+  // Model the HNF directory as a FINITE structure. Because this HNF is a
+  // non-inclusive victim cache (alloc_on_read* = False), read-shared lines are
+  // tracked only in `directory` -- the directory IS the snoop filter, so making
+  // it finite is what makes SF capacity pressure and back-invalidation visible.
+  // Default false => directory behaves exactly as today. See B2.
+  bool sf_finite := "False";
 
   // Atomic Operation Policy
   // All Near executes all Atomics at L1 (variable set to 0; default)

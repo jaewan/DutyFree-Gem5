@@ -354,6 +354,12 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.dealloc_on_shared = False
         self.dealloc_backinv_unique = False
         self.dealloc_backinv_shared = False
+        # H3 / finite snoop filter (see H3_FINITE_SF_DESIGN.md).  Both default
+        # OFF so an unset environment reproduces today's behavior exactly.
+        #   HNF_SF_FINITE=1 -> model the HNF directory as a finite snoop filter
+        #   HNF_H3=1        -> STREAMING lines skip directory/SF enrollment
+        self.sf_finite = bool(int(os.environ.get("HNF_SF_FINITE", 0)))
+        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
         # Some reasonable default TBE params (env HNF_MSHR, unset=32)
         self.number_of_TBEs = int(os.environ.get("HNF_MSHR", 32))
         self.number_of_repl_TBEs = 32
