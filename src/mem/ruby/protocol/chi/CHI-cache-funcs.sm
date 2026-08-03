@@ -81,10 +81,39 @@ CacheEntry nullCacheEntry(), return_by_pointer="yes" {
 }
 
 DirEntry getDirEntry(Addr addr), return_by_pointer = "yes" {
-  if (directory.isTagPresent(addr)) {
-    return directory.lookup(addr);
+  if (sf_finite) {
+    // finite SF (HNF only; sf is non-null by invariant)
+    if (sf.isTagPresent(addr)) {
+      return static_cast(DirEntry, "pointer", sf.lookup(addr));
+    } else {
+      return OOD;
+    }
   } else {
-    return OOD;
+    if (directory.isTagPresent(addr)) {
+      return directory.lookup(addr);
+    } else {
+      return OOD;
+    }
+  }
+}
+
+// H3/B2: route directory presence/deallocation to the finite SF when enabled,
+// else to the legacy infinite PerfectCacheMemory (byte-identical when off).
+bool dirTagPresent(Addr addr) {
+  if (sf_finite) {
+    return sf.isTagPresent(addr);
+  } else {
+    return directory.isTagPresent(addr);
+  }
+}
+
+void dirDeallocate(Addr addr) {
+  if (sf_finite) {
+    assert(sf.isTagPresent(addr));
+    sf.deallocate(addr);
+  } else {
+    assert(directory.isTagPresent(addr));
+    directory.deallocate(addr);
   }
 }
 

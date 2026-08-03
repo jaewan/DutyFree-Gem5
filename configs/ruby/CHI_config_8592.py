@@ -248,6 +248,13 @@ class Base_CHI_Cache_Controller(CHI_Cache_Controller):
         # This should be set to true in the data cache controller to enable
         # timeouts on unique lines when a store conditional fails
         self.sc_lock_enabled = False
+        # H3/B2 finite snoop-filter backing store. SLICC auto-generates an
+        # UNCONDITIONAL m_sf_ptr->setRubySystem() for this CacheMemory param, so
+        # it cannot be NULL. Give every controller a tiny dummy that is NEVER
+        # accessed unless sf_finite (getDirEntry/dirTagPresent/CheckSFFill all
+        # gate on sf_finite) -> byte-identical to legacy. The HNF overrides this
+        # with the real finite SF only when HNF_SF_FINITE is set.
+        self.sf = SFDirectory(size="1kB", assoc=1)
 
 
 class CHI_L1Controller(Base_CHI_Cache_Controller):
@@ -339,7 +346,11 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.addr_ranges = addr_ranges
         self.allow_SD = True
         self.is_HN = True
-        self.enable_DMT = True
+        # DMT default ON (calibrated baseline, unchanged for all existing runs).
+        # The H3/finite-SF experiment sets HNF_DMT=0: the finite-SF dir-allocation
+        # deferral (CheckSFFill) is incompatible with the DMT read pipeline's
+        # SendReadNoSnpDMT sequencing, and DMT is orthogonal to the SF story.
+        self.enable_DMT = bool(int(os.environ.get("HNF_DMT", 1)))
         self.enable_DCT = True
         self.send_evictions = False
         # Non-inclusive (victim cache): L2 evictions fill LLC, reads do not.
@@ -732,6 +743,23 @@ class CHI_HNF(CHI_Node):
             ruby_system, ll_cache, NULL, addr_ranges
         )
 
+        # H3/B2 finite snoop filter. Only the HNF gets a real `sf`; only when
+        # HNF_SF_FINITE=1. Default (unset) leaves sf=NULL and sf_finite=False
+        # (byte-identical to legacy). Indexed like the LLC slice so per-HNF
+        # interleaving lines up. Sized huge by default so it never evicts
+        # (behaves as the infinite PerfectCacheMemory); shrink via env for B4.
+        if bool(int(os.environ.get("HNF_SF_FINITE", 0))):
+            sf_ways = int(os.environ.get("HNF_SF_WAYS", 16))
+            sf_sets = int(os.environ.get("HNF_SF_SETS", 1 << 16))
+            self._cntrl.sf = SFDirectory(
+                size=str(sf_sets * sf_ways * 64) + "B",  # MemorySize wants a str; 64B/line
+                assoc=sf_ways,
+                start_index_bit=intlvHighBit + 1,
+            )
+            # sf_finite is already read from env in CHI_HNFController.__init__;
+            # this asserts the invariant sf != NULL <=> sf_finite at the HNF.
+            assert self._cntrl.sf_finite
+
         if parent == None:
             self.cntrl = self._cntrl
         else:
@@ -917,6 +945,13 @@ class CHI_RNI_IO(CHI_RNI_Base):
     def __init__(self, ruby_system, parent):
         super().__init__(ruby_system, parent)
         ruby_system._io_port = self._sequencer
+
+
+class SFDirectory(RubyCache):
+    # H3/B2 finite snoop-filter / coherence-directory backing store for the HNF.
+    # DirEntry carries no DataBlk, so data-array latency is irrelevant.
+    dataAccessLatency = 0
+    tagAccessLatency = 1
 
 
 class HNFCache(RubyCache):

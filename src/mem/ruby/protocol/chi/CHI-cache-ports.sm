@@ -282,7 +282,11 @@ in_port(replTriggerInPort, ReplacementMsg, replTriggerQueue, rank=4) {
       TBE tbe := getCurrentActiveTBE(in_msg.addr);
       CacheEntry cache_entry := getCacheEntry(in_msg.addr);
       Event trigger := Event:null;
-      if (is_valid(cache_entry) &&
+      if (in_msg.isSFEvict) {
+        // H3/B2 finite-SF capacity eviction: the victim's state (pure-R vs
+        // combined) selects the SF_Eviction transition row.
+        trigger := Event:SF_Eviction;
+      } else if (is_valid(cache_entry) &&
           ((upstreamHasUnique(cache_entry.state) && dealloc_backinv_unique) ||
           (upstreamHasShared(cache_entry.state) && dealloc_backinv_shared))) {
         trigger := Event:Global_Eviction;

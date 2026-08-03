@@ -50,6 +50,12 @@ machine(MachineType:Cache, "Cache coherency protocol") :
   // null if the cache does not support prefetching
   prefetch::Base * prefetcher;
 
+  // H3/B2 finite snoop-filter backing store (a CacheMemory param, like `cache`).
+  // NULL for every controller except the HNF, and only when sf_finite is set;
+  // dereferenced ONLY when sf_finite (invariant: sf_finite => is_HN => sf!=NULL).
+  // Mirrors the nullable `prefetcher` param so sf_finite=false is byte-identical.
+  CacheMemory * sf;
+
   // Additional pipeline latency modeling for the different request types
   // When defined, these are applied after the initial tag array read and
   // sending necessary snoops.
@@ -442,6 +448,10 @@ machine(MachineType:Cache, "Cache coherency protocol") :
 
     // Cache fill handling
     CheckCacheFill,   desc="Check if need to write or update the cache and trigger any necessary allocation and evictions";
+
+    // H3/B2 finite snoop-filter handling
+    CheckSFFill,      desc="Ensure the finite SF has room for this dir entry; evict an SF victim if full";
+    SF_Eviction,      in_trans="yes", desc="Finite-SF capacity eviction: back-invalidate all upstream sharers of a directory-tracked victim";
 
     // Internal requests generated to evict or writeback a local copy
     // to free-up cache space
@@ -898,6 +908,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     Addr addr;
     Addr from_addr;
     int slot; // set only when unify_repl_TBEs is set
+    bool isSFEvict, default="false"; // true => finite-SF (directory) eviction, not L3 data
     bool functionalRead(Packet *pkt) { return false; }
     bool functionalRead(Packet *pkt, WriteMask &mask) { return false; }
     bool functionalWrite(Packet *pkt) { return false; }
