@@ -355,9 +355,14 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             // 2 MB page
             entry.logBytes = 21;
             entry.paddr = mbits(pte, 51, 21);
-            entry.uncacheable = uncacheable;
             entry.global = pte.g;
             entry.patBit = bits(pte, 12);
+            // STREAMING (PAT slot 6): PAT=1, PCD=1, PWT=0, as written by
+            // Linux mprotect(PROT_STREAMING). At a PMD leaf the PAT selector
+            // is bit 12. Slot 6 is a WB-equivalent type, so PCD must not be
+            // read as "uncacheable" here.
+            entry.streaming = bits(pte, 12) && pte.pcd && !pte.pwt;
+            entry.uncacheable = uncacheable && !entry.streaming;
             entry.vaddr = mbits(entry.vaddr, 63, 21);
             doTLBInsert = true;
             doEndWalk = true;
@@ -375,9 +380,14 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
             break;
         }
         entry.paddr = mbits(pte, 51, 12);
-        entry.uncacheable = uncacheable;
         entry.global = pte.g;
         entry.patBit = bits(pte, 12);
+        // STREAMING (PAT slot 6): at a 4K PTE the PAT selector is bit 7.
+        // entry.patBit above reads bit 12, which is part of the frame
+        // address at this level, so read the selector directly rather than
+        // reusing it. Slot 6 is WB-equivalent: do not honour PCD here.
+        entry.streaming = bits(pte, 7) && pte.pcd && !pte.pwt;
+        entry.uncacheable = uncacheable && !entry.streaming;
         entry.vaddr = mbits(entry.vaddr, 63, 12);
         doTLBInsert = true;
         doEndWalk = true;
