@@ -48,6 +48,7 @@ testcase/dirtax/aggressor_lowBW
 testcase/dirtax/aggressor_finite
 testcase/dirtax/aggressor_finite_lowBW
 testcase/dirtax/dummy
+testcase/dirtax/h2probe
 testcase/dutyfree/victim
 testcase/dutyfree/aggressor
 testcase/dutyfree/aggressor_lowBW

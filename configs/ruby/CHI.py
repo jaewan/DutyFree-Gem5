@@ -33,6 +33,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
+
 import m5
 from m5.defines import buildEnv
 from m5.objects import *
@@ -143,6 +145,48 @@ def create_system(
     class HNFCache(_HNFBase):
         size = options.l3_size
         assoc = options.l3_assoc
+
+    # LLC replacement policy. RubyCache's default is TreePLRURP, which inserts
+    # at MRU and so has no thrash/scan resistance at all; env LLC_RP selects an
+    # RRIP variant instead. Unset (or "plru") keeps the default exactly.
+    #   srrip = RRIPRP  (BRRIP with btp=100: every fill inserted at "long")
+    #   brrip = BRRIPRP (btp=3: bimodal, mostly "distant")
+    #   drrip = DRRIPRP (set-dueling between the two)
+    # LLC_RP_HP=0 switches RRIP hit promotion from HP (reset to 0) to FP
+    # (decrement), for a sensitivity run.
+    _llc_rp = os.environ.get("LLC_RP", "plru").lower()
+    if _llc_rp not in ("plru", "srrip", "brrip", "drrip"):
+        m5.fatal(f"unknown LLC_RP '{_llc_rp}' (plru|srrip|brrip|drrip)")
+    if _llc_rp != "plru":
+        _hp = bool(int(os.environ.get("LLC_RP_HP", 1)))
+        if _llc_rp == "srrip":
+            HNFCache.replacement_policy = RRIPRP(hit_priority=_hp)
+        elif _llc_rp == "brrip":
+            HNFCache.replacement_policy = BRRIPRP(hit_priority=_hp)
+        else:
+            # DuelingMonitor::initEntry() walks replacement data in the order
+            # CacheMemory instantiates it, which is set-major, so team_size =
+            # assoc keeps each leader a whole set. LLC_RP_LEADERS leader sets
+            # per team; a cache with few sets needs a smaller number, or every
+            # set becomes a leader and there are no followers left to steer.
+            from m5.util.convert import toMemorySize
+
+            _leaders = int(os.environ.get("LLC_RP_LEADERS", 32))
+            _sets = int(toMemorySize(options.l3_size)) // (
+                options.cacheline_size * options.l3_assoc
+            )
+            if _sets < 2 * _leaders:
+                m5.fatal(
+                    f"LLC has {_sets} sets; DRRIP with {_leaders} leader sets "
+                    f"per team leaves no followers. Lower LLC_RP_LEADERS."
+                )
+            HNFCache.replacement_policy = DRRIPRP(
+                constituency_size=(_sets // _leaders) * options.l3_assoc,
+                team_size=options.l3_assoc,
+                replacement_policy_a=BRRIPRP(hit_priority=_hp),
+                replacement_policy_b=RRIPRP(hit_priority=_hp),
+            )
+        print(f"CHI: LLC replacement policy = {_llc_rp} (hit_priority={_hp})")
 
     # other functions use system.cache_line_size assuming it has been set
     assert system.cache_line_size.value == options.cacheline_size
