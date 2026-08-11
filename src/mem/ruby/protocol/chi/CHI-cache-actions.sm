@@ -413,6 +413,16 @@ action(Initiate_Replacement, desc="") {
   if (initial == State:UD_RU) {
     tbe.dataBlk := cache_entry.DataBlk;
     tbe.dataBlkValid.fillMask();
+    // H3/B2 FIX: the HN block is the authoritative dirty copy for a UD_RU victim.
+    // copyCacheAndDir leaves dataValid=false; the mainline Global_Eviction path
+    // masks that via Initiate_Replacement_WB_BackInvalidate (unconditional WB),
+    // but the SF_Eviction path drains through MaintainCoherence, whose WB is
+    // gated on dataValid. Without this, an SF eviction of a UD_RU line whose
+    // upstream owner is CLEAN (replies SnpResp_I, no data) drops the dirty block
+    // silently after Deallocate_CacheBlock. Marking it valid makes MaintainCoherence
+    // write it back; a dirty-owner snoop (SnpRespData_I_PD) later overwrites it
+    // with the newer copy, so this is correct on both paths.
+    tbe.dataValid := true;
   }
 
   // model the initial tag array read
@@ -1526,6 +1536,23 @@ action(Initiate_Replacement_WB_BackInvalidate, desc="") {
   tbe.dataToBeInvalid := true;
 
   tbe.actions.pushNB(Event:TagArrayWrite);
+}
+
+// H3/B2: HN back-invalidate all sharers of a directory-tracked (finite-SF) victim,
+// writing back any pulled/held dirty data. SnpCleanInvalid arms the expected-response
+// map (setExpectedForInvSnoop) and pulls SnpRespData_I_PD from a dirty owner; its
+// responses clear dir_ownerExists and set dataDirty BEFORE MaintainCoherence runs.
+// MaintainCoherence is HN-safe and clean-aware: it emits WriteNoSnp+WBData IFF
+// (post-snoop) dataDirty && !has_non_ex_owner, else it is a no-op -- so a clean
+// pure-R victim does NOT hit the Send_WBData asserts. It also queues the closing
+// TagArrayWrite. See H3_IMPL_SPEC.md response-map accounting for the deallocation proof.
+action(Initiate_SF_Eviction, desc="HN back-invalidate all sharers of a directory-tracked victim") {
+  assert(is_HN);
+  assert(is_valid(tbe));
+  assert(tbe.dir_sharers.count() > 0); // guaranteed for RU/RSC/RSD/RUSC/RUSD + all combined dir states
+  tbe.dataToBeInvalid := true;
+  tbe.actions.push(Event:SendSnpCleanInvalid);
+  tbe.actions.push(Event:MaintainCoherence);
 }
 
 action(Initiate_Replacement_WB, desc="") {
@@ -3439,8 +3466,8 @@ action(Finalize_UpdateDirectoryFromTBE, desc="") {
     dir_entry.sharers := tbe.dir_sharers;
   } else {
     assert((tbe.dir_ownerExists == false) && tbe.dir_sharers.isEmpty());
-    if(directory.isTagPresent(address)) {
-      directory.deallocate(address);
+    if(dirTagPresent(address)) {
+      dirDeallocate(address);
     }
   }
 }
@@ -3452,13 +3479,27 @@ action(Deallocate_CacheBlock, desc="") {
 }
 
 action(Allocate_DirEntry, desc="") {
-  assert(directory.isTagPresent(address) == false);
-  directory.allocate(address);
+  assert(is_valid(tbe));
+  // B3 (H3): a STREAMING line skips SF enrollment entirely, and we suppress the
+  // CompAck sharer-record so the transaction finalizes to I (no dir entry ever
+  // expected at Finalize). Gated by enable_H3_streaming_bypass (default off).
+  // (SLICC actions have no `return`, so this is an if/else-if/else chain.)
+  if (enable_H3_streaming_bypass && is_HN && tbe.isStreaming) {
+    tbe.updateDirOnCompAck := false;
+  } else if (sf_finite) {
+    // Finite SF (HNF only): defer to CheckSFFill, which allocates now if there
+    // is room, else evicts a victim and retries. pushFront keeps allocation
+    // ahead of the read pipeline -- same ordering as the synchronous path.
+    tbe.actions.pushFront(Event:CheckSFFill);
+  } else {
+    // Unchanged legacy path: infinite PerfectCacheMemory.
+    assert(directory.isTagPresent(address) == false);
+    directory.allocate(address);
+  }
 }
 
 action(Deallocate_DirEntry, desc="") {
-  assert(directory.isTagPresent(address));
-  directory.deallocate(address);
+  dirDeallocate(address);
 }
 
 action(CheckCacheFill, desc="") {
@@ -3524,6 +3565,51 @@ action(CheckCacheFill, desc="") {
     processNextState(address, tbe, cache_entry);
   } else {
     wakeupPendingSnps(tbe); // might have stalled snoops that can execute now
+  }
+}
+
+
+// H3/B2: finite snoop-filter allocation. Clone of CheckCacheFill retargeted to
+// the `sf` CacheMemory (directory entries, no data block). Only ever reached
+// when sf_finite (HNF-only), via Allocate_DirEntry's finite branch.
+action(CheckSFFill, desc="Ensure a finite-SF dir slot is free; evict an SF victim if full") {
+  assert(is_valid(tbe));
+  assert(is_HN); // sf_finite is only ever true at the HNF
+  bool execute_next := true;
+
+  if (sf.isTagPresent(address)) {
+    // already allocated on a prior pass (or combined-state re-touch): nothing to do
+  } else if (sf.cacheAvail(address)) {
+    sf.allocateVoid(address, new DirEntry);
+  } else {
+    // no room in this set: pick a victim, evict it, and re-run after it drains
+    execute_next := false;
+    Addr victim_addr := sf.cacheProbe(address);
+    DirEntry victim_dir := getDirEntry(victim_addr);
+    TBE victim_tbe := getCurrentActiveTBE(victim_addr);
+    assert(is_valid(victim_dir));
+    if (is_invalid(victim_tbe) && is_valid(victim_dir)) {
+      DPRINTF(RubySlicc, "SF eviction for %#x victim: %#x state=%s\n",
+                          address, victim_addr, victim_dir.state);
+      enqueue(replTriggerOutPort, ReplacementMsg, 0) {
+        out_msg.addr := victim_addr;
+        out_msg.from_addr := address;
+        out_msg.isSFEvict := true;
+        // unify_repl_TBEs is False at the HNF, so no out_msg.slot
+      }
+    } else {
+      // victim busy: its own transaction will wake us on completion
+      victim_tbe.wakeup_pending_tgr := true;
+    }
+    stall_and_wait(triggerInPort, victim_addr);
+  }
+
+  if (execute_next) {
+    triggerInPort.dequeue(clockEdge());
+    clearPendingAction(tbe);
+    processNextState(address, tbe, cache_entry);
+  } else {
+    wakeupPendingSnps(tbe);
   }
 }
 

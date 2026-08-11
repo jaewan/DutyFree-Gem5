@@ -112,6 +112,14 @@ transition({BUSY_INTR,BUSY_BLKD}, CheckCacheFill, BUSY_INTR) {
   // or a stall depending on block availability
 }
 
+// H3/B2: finite-SF allocation driver. Unlike CheckCacheFill (which runs in the
+// fill phase and moves to BUSY_INTR), Allocate_DirEntry -> CheckSFFill runs in the
+// request-issue phase, so this transition MUST preserve the current state
+// (no next-state) or the following SendReadNoSnp/DMT action has no transition.
+transition({BUSY_INTR,BUSY_BLKD}, CheckSFFill) {
+  CheckSFFill;
+}
+
 transition({BUSY_INTR,BUSY_BLKD}, DataArrayWrite) {DataArrayWrite} {
   Pop_TriggerQueue;
   DataArrayWrite;
@@ -890,6 +898,37 @@ transition(I, Global_Eviction) {
   Pop_ReplTriggerQueue;
 }
 
+// H3/B2 finite-SF capacity eviction.
+// Directory-only (pure-R) victims: NO cache block to free -- back-invalidate the
+// sharers and free only the SF slot. Initiate_Replacement allocs the repl TBE and
+// copyCacheAndDir loads dir_sharers (tolerating a null cache_entry).
+transition({RU,RSC,RSD,RUSC,RUSD}, SF_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_SF_Eviction;
+  Profile_Eviction;
+  Deallocate_DirEntry;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+// Combined (cache-block + dir) victims: additionally free the L3 data block.
+// Deallocate_CacheBlock uses tbe.dataBlk (copied by copyCacheAndDir), so early
+// dealloc is safe -- identical pattern to Global_Eviction.
+transition({UD_RSC,SD_RSC,UC_RSC,SC_RSC,UD_RU,UC_RU,UD_RSD,SD_RSD}, SF_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_SF_Eviction;
+  Profile_Eviction;
+  Deallocate_CacheBlock;
+  Deallocate_DirEntry;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+// Victim raced to I (already invalidated) before the SF eviction was handled.
+transition(I, SF_Eviction) {
+  Pop_ReplTriggerQueue;
+}
+
 // Snoops
 
 // SnpCleanInvalid/SnpUnique/SnpUniqueFwd
@@ -983,7 +1022,7 @@ transition({BUSY_BLKD,BUSY_INTR},
 }
 
 transition({BUSY_BLKD,BUSY_INTR},
-           {Global_Eviction, Local_Eviction, LocalHN_Eviction}) {
+           {Global_Eviction, Local_Eviction, LocalHN_Eviction, SF_Eviction}) {
   StallLocalEviction;
 }
 
