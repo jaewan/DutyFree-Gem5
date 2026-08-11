@@ -319,19 +319,64 @@ if args.ruby:
 
     # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
     # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
-    # ALL_CXL=1 forces every process onto the CXL pool (pool 1) instead — used
-    # for single-core CXL bandwidth/latency calibration where the sole process
-    # must allocate from the CXL range.
+    #
+    # Three env overrides, in descending precedence:
+    #   CPU_POOLS="0,0"  explicit per-CPU pool ids; length must equal num_cpus
+    #   ALL_CXL=1        every process on the CXL pool (1) — used for
+    #                    single-core CXL bandwidth/latency calibration where
+    #                    the sole process must allocate from the CXL range.
+    #   ALL_LOCAL=1      every process on the DRAM pool (0)
+    #
+    # ALL_LOCAL exists so a victim+aggressor pair can be co-placed on local
+    # DRAM while the CXL pool stays configured but unused.  That is the
+    # local-DRAM control behind tab:gem5, and before this override it was
+    # unreachable without editing this file — the default hardcodes cpu1+
+    # onto CXL, and ALL_CXL only moves everyone the other way.  See
+    # experiments/asplos/GATE1_RECONCILIATION.md.
+    #
+    # Keep the precedence in sync with experiments/asplos/gate1_manifest.py's
+    # `mem_pool_policy`, which restates it for the run manifest.
     if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
-        all_cxl = os.environ.get("ALL_CXL", "0") not in (
-            "0",
-            "",
-            "false",
-            "False",
-        )
+
+        def _pool_flag(name):
+            return os.environ.get(name, "0") not in ("0", "", "false", "False")
+
+        all_cxl = _pool_flag("ALL_CXL")
+        all_local = _pool_flag("ALL_LOCAL")
+        if all_cxl and all_local:
+            fatal("ALL_CXL and ALL_LOCAL are mutually exclusive")
+
+        cpu_pools = None
+        _cpu_pools_env = os.environ.get("CPU_POOLS")
+        if _cpu_pools_env:
+            try:
+                cpu_pools = [int(x) for x in _cpu_pools_env.split(",")]
+            except ValueError:
+                fatal(
+                    "CPU_POOLS must be a comma-separated list of pool ids, "
+                    f"got {_cpu_pools_env!r}"
+                )
+            if len(cpu_pools) != np:
+                fatal(
+                    f"CPU_POOLS lists {len(cpu_pools)} pool ids but there are "
+                    f"{np} CPUs"
+                )
+            if any(p not in (0, 1) for p in cpu_pools):
+                fatal(
+                    "CPU_POOLS entries must be 0 (DRAM) or 1 (CXL), got "
+                    f"{cpu_pools}"
+                )
+
         seen = set()
         for i in range(np):
-            pool_id = 1 if all_cxl else (0 if i == 0 else 1)
+            if cpu_pools is not None:
+                pool_id = cpu_pools[i]
+            elif all_cxl:
+                pool_id = 1
+            elif all_local:
+                pool_id = 0
+            else:
+                pool_id = 0 if i == 0 else 1
             workload = system.cpu[i].workload
             if not isinstance(workload, list):
                 workload = [workload]
