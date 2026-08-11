@@ -160,6 +160,14 @@ def build_test_system(np, isa: ISA):
             args, True, test_sys, test_sys.iobus, test_sys._dma_ports, bootmem
         )
 
+        # Optional: enable RubySystem-level message-buffer randomization to
+        # break deterministic timing races that cause per-CPU BW asymmetry on
+        # slow cache configs (e.g., Intel 8592). Gated by env var to preserve
+        # default. Kept in sync with the identical block in se.py so SE and
+        # FS agree on this (SE/FS same-machine contract).
+        if os.environ.get("RUBY_RANDOMIZATION") == "1":
+            test_sys.ruby.randomization = True
+
         # Create a seperate clock domain for Ruby
         test_sys.ruby.clk_domain = SrcClockDomain(
             clock=args.ruby_clock, voltage_domain=test_sys.voltage_domain
