@@ -56,6 +56,7 @@ testcase/dutyfree/aggressor_finite
 testcase/dutyfree/aggressor_finite_lowBW
 testcase/dutyfree/streaming_pf_probe
 testcase/dutyfree/dummy
+testcase/dutyfree/h1bw_stream
 results/
 .DS_Store
 
