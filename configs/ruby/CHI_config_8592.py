@@ -379,11 +379,16 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_H3_streaming_bypass = bool(
             int(os.environ.get("HNF_H3", 0))
         )
-        # HNF_FWD_UNIQUE=1: a ReadShared hitting a UC/UD line at the HNF is
-        # answered with unique state (real x86 grants E to a sole reader);
-        # default 0 keeps the gem5 CHI default (grant SC) = today's behavior.
+        # HNF_FWD_UNIQUE: a ReadShared hitting a UC/UD line at the HNF is
+        # answered with unique state (real x86 MESIF grants E to a sole
+        # reader). Default 1 since 2026-08-14: the gem5 CHI default (grant
+        # SC) permanently exiles a victim's clean lines from the NINE LLC
+        # after their first eviction (SC evicts are silent, no refill path),
+        # inflating the onset-region tax (mini 25p: 1.63 vs 1.29; 53p+ and
+        # H2/BW unaffected — see 9_shared_vs_distinct.md A/B).
+        # HNF_FWD_UNIQUE=0 restores the old SC behavior.
         self.fwd_unique_on_readshared = bool(
-            int(os.environ.get("HNF_FWD_UNIQUE", 0))
+            int(os.environ.get("HNF_FWD_UNIQUE", 1))
         )
         # Cross-guard: the finite-SF dir-allocation deferral (CheckSFFill) is
         # incompatible with the DMT read pipeline (SendReadNoSnpDMT sequencing),
