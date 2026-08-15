@@ -290,7 +290,14 @@ class CHI_L1Controller(Base_CHI_Cache_Controller):
         self.dealloc_backinv_shared = True
         # Some reasonable default TBE params (env L1_MSHR, unset=16)
         self.number_of_TBEs = int(os.environ.get("L1_MSHR", 16))
-        self.number_of_repl_TBEs = 16
+        # Replacement-path depth (env L1_REPL). Default 16 so an unset
+        # environment reproduces today's behavior exactly. Sweeping L1_MSHR
+        # alone starves this path relative to the request path (64 vs 16),
+        # and the STREAMING attribute has to survive the eviction path
+        # (cache_entry.isStreaming -> TBE -> WriteEvictFull) to be honoured
+        # at the HNF -- so this is a candidate cause of H2 fill-suppression
+        # degrading at high L1_MSHR.
+        self.number_of_repl_TBEs = int(os.environ.get("L1_REPL", 16))
         self.number_of_snoop_TBEs = 4
         self.number_of_DVM_TBEs = 16
         self.number_of_DVM_snoop_TBEs = 4
@@ -331,7 +338,9 @@ class CHI_L2Controller(Base_CHI_Cache_Controller):
         self.dealloc_backinv_shared = True
         # L2 superqueue ~48 on SPR/EMR (env L2_MSHR)
         self.number_of_TBEs = int(os.environ.get("L2_MSHR", 48))
-        self.number_of_repl_TBEs = 32
+        # Replacement-path depth (env L2_REPL); default 32 preserves today's
+        # behavior when unset. See the L1_REPL note above.
+        self.number_of_repl_TBEs = int(os.environ.get("L2_REPL", 32))
         self.number_of_snoop_TBEs = 16
         self.number_of_DVM_TBEs = 1  # should not receive any dvm
         self.number_of_DVM_snoop_TBEs = 1  # should not receive any dvm
