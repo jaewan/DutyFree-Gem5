@@ -761,6 +761,27 @@ class CHI_HNF(CHI_Node):
         assert len(addr_ranges) >= 1
 
         ll_cache = llcache_type(start_index_bit=intlvHighBit + 1)
+
+        # LLC replacement policy (env HNF_RP). Unset keeps whatever
+        # llcache_type specifies; RubyCache's default is TreePLRURP, which is
+        # what every published number in this project was produced with -- so
+        # an unset environment reproduces prior behaviour exactly, and any
+        # comparison must name TreePLRU rather than assume LRU.
+        #
+        # #28 needs a reuse predictor at the LLC to compare declaration
+        # against prediction. SHiP is the only one in this tree (Hawkeye and
+        # Mockingjay are absent). SHiPMemRP, not SHiPPCRP: Ruby requests do
+        # not reliably carry a PC for a PC-indexed signature.
+        _rp = os.environ.get("HNF_RP", "").strip().lower()
+        if _rp in ("ship", "ship_mem", "shipmem"):
+            ll_cache.replacement_policy = SHiPMemRP()
+        elif _rp == "brrip":
+            ll_cache.replacement_policy = BRRIPRP()
+        elif _rp == "lru":
+            ll_cache.replacement_policy = LRURP()
+        elif _rp not in ("", "default", "treeplru", "tree_plru"):
+            m5.fatal("unknown HNF_RP=%s (ship|brrip|lru|treeplru)", _rp)
+
         self._cntrl = CHI_HNFController(
             ruby_system, ll_cache, NULL, addr_ranges
         )
