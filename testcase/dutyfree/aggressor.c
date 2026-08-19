@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Sequential streaming aggressor — bandwidth-maximizing variant, DutyFree
  * (STREAMING / LLC+PF bypass). argv[1] = size_mb (float, default 4.0).
@@ -38,8 +39,12 @@ int main(int argc, char *argv[])
 
     for (long i = 0; i < N; i++) arr[i] = i;   /* non-zero init + first-touch */
 
-    /* Mark streaming region AFTER init writes, BEFORE the read-only loop. */
-    gem5_set_streaming((void*)arr, N * (long)sizeof(long));
+    /* Mark streaming region AFTER init writes, BEFORE the read-only loop.
+     * Gated on argv[2]=="stream" so one binary serves both the WB and the H2
+     * arm: using two different binaries would confound the comparison with a
+     * code difference. Same convention as h1bw_stream.c. */
+    if (argc > 2 && strcmp(argv[2], "stream") == 0)
+        gem5_set_streaming((void*)arr, N * (long)sizeof(long));
 
     static volatile unsigned long sink;
     unsigned long a[UNROLL];
