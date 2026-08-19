@@ -385,7 +385,15 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         #   HNF_SF_FINITE=1 -> model the HNF directory as a finite snoop filter
         #   HNF_H3=1        -> STREAMING lines skip directory/SF enrollment
         self.sf_finite = bool(int(os.environ.get("HNF_SF_FINITE", 0)))
-        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
+        self.enable_H3_streaming_bypass = bool(
+            int(os.environ.get("HNF_H3", 0))
+        )
+        # HNF_FWD_UNIQUE=1: a ReadShared hitting a UC/UD line at the HNF is
+        # answered with unique state (real x86 grants E to a sole reader);
+        # default 0 keeps the gem5 CHI default (grant SC) = today's behavior.
+        self.fwd_unique_on_readshared = bool(
+            int(os.environ.get("HNF_FWD_UNIQUE", 0))
+        )
         # Cross-guard: the finite-SF dir-allocation deferral (CheckSFFill) is
         # incompatible with the DMT read pipeline (SendReadNoSnpDMT sequencing),
         # and finite-SF misses often, firing the DMT branch constantly. Forgetting
