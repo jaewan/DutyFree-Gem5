@@ -411,3 +411,92 @@ TEST_F(OneLeafTreePLRUDeathTestF, OneLeafTree)
     ASSERT_ANY_THROW(rp->invalidate(entries[0].replacementData));
     ASSERT_ANY_THROW(rp->touch(entries[0].replacementData));
 }
+
+/**
+ * Characterization tests for non-power-of-two associativity.
+ *
+ * These document a real defect rather than asserting correct behaviour.
+ * TreePLRU stores numLeaves-1 internal nodes in a flat array and descends from
+ * the root while tree_index < numLeaves-1, mapping the stopping index to
+ * candidates.at(tree_index - (numLeaves - 1)). When numLeaves is a power of two
+ * that array is a perfect binary tree and every leaf sits at the same depth.
+ * When it is not, leaves land at TWO depths, and a leaf at depth d is reached
+ * with probability 2^-d -- so the shallow group is victimized twice as often as
+ * the deep group. Way index carries no meaning to a cache, so this is a bias,
+ * not a policy.
+ *
+ * Recorded because gem5 configurations in the wild use associativity 12 and 20
+ * (see DutyFree experiments/asplos/GEM5_TREEPLRU_NONPOW2_BIAS_2026-08-28.md);
+ * there is no guard -- num_leaves defaults to Parent.assoc and the only check
+ * is fatal_if(numLeaves < 1).
+ */
+class TreePLRUHistogramTestF : public TreePLRUVictimizationTestF
+{
+  public:
+    TreePLRUHistogramTestF(int num_entries) 
+        : TreePLRUVictimizationTestF(num_entries) {}
+
+    /// Run `rounds` of (getVictim -> touch the victim), which is what a cache
+    /// does on a miss to a full set, and count selections per candidate index.
+    std::vector<uint64_t>
+    victimHistogram(unsigned rounds)
+    {
+        std::vector<uint64_t> hist(numLeaves, 0);
+        for (unsigned i = 0; i < rounds; i++) {
+            auto *victim = rp->getVictim(candidates);
+            for (int w = 0; w < numLeaves; w++) {
+                if (victim == &entries[w]) { hist[w]++; break; }
+            }
+            rp->touch(victim->replacementData);
+        }
+        return hist;
+    }
+};
+
+class TreePLRU8  : public TreePLRUHistogramTestF
+{ public: TreePLRU8()  : TreePLRUHistogramTestF(8)  {} };
+class TreePLRU12 : public TreePLRUHistogramTestF
+{ public: TreePLRU12() : TreePLRUHistogramTestF(12) {} };
+class TreePLRU16 : public TreePLRUHistogramTestF
+{ public: TreePLRU16() : TreePLRUHistogramTestF(16) {} };
+class TreePLRU20 : public TreePLRUHistogramTestF
+{ public: TreePLRU20() : TreePLRUHistogramTestF(20) {} };
+
+/// assoc 8: a power of two. Every way must be victimized equally.
+TEST_F(TreePLRU8, UniformAtPowerOfTwo)
+{
+    auto h = victimHistogram(8000);
+    for (int w = 0; w < 8; w++)
+        EXPECT_EQ(h[w], 1000u) << "way " << w << " selected " << h[w] << " times";
+}
+
+/// assoc 16: a power of two. Every way must be victimized equally.
+TEST_F(TreePLRU16, UniformAtPowerOfTwo)
+{
+    auto h = victimHistogram(16000);
+    for (int w = 0; w < 16; w++)
+        EXPECT_EQ(h[w], 1000u) << "way " << w << " selected " << h[w] << " times";
+}
+
+/// assoc 12: NOT a power of two. Ways 0-3 sit at depth 3 and ways 4-11 at
+/// depth 4, so 0-3 are victimized twice as often. Documents the defect.
+TEST_F(TreePLRU12, BiasedAtNonPowerOfTwo)
+{
+    auto h = victimHistogram(16000);
+    for (int w = 0; w < 4; w++)
+        EXPECT_EQ(h[w], 2000u) << "shallow way " << w << " got " << h[w];
+    for (int w = 4; w < 12; w++)
+        EXPECT_EQ(h[w], 1000u) << "deep way " << w << " got " << h[w];
+}
+
+/// assoc 20: NOT a power of two, and the associativity of the LLC in the
+/// DutyFree CHI configuration. Ways 0-11 sit at depth 4 and ways 12-19 at
+/// depth 5, so 0-11 are victimized twice as often.
+TEST_F(TreePLRU20, BiasedAtNonPowerOfTwo)
+{
+    auto h = victimHistogram(32000);
+    for (int w = 0; w < 12; w++)
+        EXPECT_EQ(h[w], 2000u) << "shallow way " << w << " got " << h[w];
+    for (int w = 12; w < 20; w++)
+        EXPECT_EQ(h[w], 1000u) << "deep way " << w << " got " << h[w];
+}
