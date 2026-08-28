@@ -1,0 +1,421 @@
+# Copyright (c) 2012-2013 ARM Limited
+# All rights reserved.
+#
+# The license below extends only to copyright in the software and shall
+# not be construed as granting a license to any other intellectual
+# property including but not limited to intellectual property relating
+# to a hardware implementation of the functionality of the software
+# licensed hereunder.  You may use the software subject to the license
+# terms below provided that you ensure that this notice is replicated
+# unmodified and in its entirety in all distributions of the software,
+# modified or unmodified, in source code or in binary form.
+#
+# Copyright (c) 2006-2008 The Regents of The University of Michigan
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met: redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer;
+# redistributions in binary form must reproduce the above copyright
+# notice, this list of conditions and the following disclaimer in the
+# documentation and/or other materials provided with the distribution;
+# neither the name of the copyright holders nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Simple test script
+#
+# "m5 test.py"
+
+import argparse
+import os
+import sys
+
+import m5
+from m5.defines import buildEnv
+from m5.objects import *
+from m5.params import NULL
+from m5.util import (
+    addToPath,
+    fatal,
+    warn,
+)
+
+from gem5.isas import ISA
+
+addToPath("../../")
+
+from common import (
+    CacheConfig,
+    CpuConfig,
+    MemConfig,
+    ObjectList,
+    Options,
+    Simulation,
+)
+from common.Caches import *
+from common.cpu2000 import *
+from common.FileSystemConfig import config_filesystem
+from ruby import Ruby
+
+
+def get_processes(args):
+    """Interprets provided args and returns a list of processes"""
+
+    multiprocesses = []
+    inputs = []
+    outputs = []
+    errouts = []
+    pargs = []
+
+    workloads = args.cmd.split(";")
+    if args.input != "":
+        inputs = args.input.split(";")
+    if args.output != "":
+        outputs = args.output.split(";")
+    if args.errout != "":
+        errouts = args.errout.split(";")
+    if args.options != "":
+        pargs = args.options.split(";")
+
+    idx = 0
+    for wrkld in workloads:
+        process = Process(pid=100 + idx)
+        process.executable = wrkld
+        process.cwd = os.getcwd()
+        process.gid = os.getgid()
+
+        if args.env:
+            with open(args.env) as f:
+                process.env = [line.rstrip() for line in f]
+
+        if len(pargs) > idx:
+            process.cmd = [wrkld] + pargs[idx].split()
+        else:
+            process.cmd = [wrkld]
+
+        if len(inputs) > idx:
+            process.input = inputs[idx]
+        if len(outputs) > idx:
+            process.output = outputs[idx]
+        if len(errouts) > idx:
+            process.errout = errouts[idx]
+
+        multiprocesses.append(process)
+        idx += 1
+
+    if args.smt:
+        cpu_type = ObjectList.cpu_list.get(args.cpu_type)
+        assert ObjectList.is_o3_cpu(cpu_type), "SMT requires an O3CPU"
+        return multiprocesses, idx
+    else:
+        return multiprocesses, 1
+
+
+warn(
+    "The se.py script is deprecated. It will be removed in future releases of "
+    " gem5."
+)
+
+parser = argparse.ArgumentParser()
+Options.addCommonOptions(parser)
+Options.addSEOptions(parser)
+
+if "--ruby" in sys.argv:
+    Ruby.define_options(parser)
+
+args = parser.parse_args()
+
+multiprocesses = []
+numThreads = 1
+
+if args.bench:
+    apps = args.bench.split("-")
+    if len(apps) != args.num_cpus:
+        print("number of benchmarks not equal to set num_cpus!")
+        sys.exit(1)
+
+    for app in apps:
+        try:
+            if ObjectList.cpu_list.get_isa(args.cpu_type) == ISA.ARM:
+                exec(
+                    "workload = %s('arm_%s', 'linux', '%s')"
+                    % (app, args.arm_iset, args.spec_input)
+                )
+            else:
+                # TARGET_ISA has been removed, but this is missing a ], so it
+                # has incorrect syntax and wasn't being used anyway.
+                exec(
+                    "workload = %s(buildEnv['TARGET_ISA', 'linux', '%s')"
+                    % (app, args.spec_input)
+                )
+            multiprocesses.append(workload.makeProcess())
+        except:
+            print(
+                f"Unable to find workload for ISA: {app}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+elif args.cmd:
+    multiprocesses, numThreads = get_processes(args)
+else:
+    print("No workload specified. Exiting!\n", file=sys.stderr)
+    sys.exit(1)
+
+
+(CPUClass, test_mem_mode, FutureClass) = Simulation.setCPUClass(args)
+CPUClass.numThreads = numThreads
+
+# Check -- do not allow SMT with multiple CPUs
+if args.smt and args.num_cpus > 1:
+    fatal("You cannot use SMT with multiple CPUs!")
+
+np = args.num_cpus
+mp0_path = multiprocesses[0].executable
+system = System(
+    cpu=[CPUClass(cpu_id=i) for i in range(np)],
+    mem_mode=test_mem_mode,
+    mem_ranges=[AddrRange(args.mem_size)],
+    cache_line_size=args.cacheline_size,
+)
+
+if numThreads > 1:
+    system.multi_thread = True
+
+# O3 core sizing: SPR (Golden Cove) class defaults, env-overridable.
+if hasattr(system.cpu[0], "numROBEntries"):  # O3 only
+    for _cpu in system.cpu:
+        # deeper IEW->commit buffer; default 5 overflows on same-cycle
+        # load-completion bursts with large MSHRs (timebuf.hh assert)
+        _cpu.forwardComSize = 256
+        _cpu.numROBEntries = int(os.environ.get("ROBSZ", 512))
+        _cpu.LQEntries = int(os.environ.get("LQSZ", 192))
+        _cpu.SQEntries = int(os.environ.get("SQSZ", 114))
+        _cpu.instQueues = [IQUnit(numEntries=int(os.environ.get("IQSZ", 200)))]
+        _cpu.numPhysIntRegs = int(os.environ.get("INTREGS", 280))
+        _cpu.numPhysFloatRegs = int(os.environ.get("FPREGS", 332))
+        _cpu.numPhysVecRegs = int(os.environ.get("VECREGS", 332))
+        # EMR (Raptor Cove) pipeline widths: 6-wide decode/alloc, 12 exec
+        # ports, 8-wide retire (gem5 MaxWidth=16 allows issue/wb 12).
+        _cpu.fetchWidth = int(os.environ.get("FETCHW", 6))
+        _cpu.decodeWidth = int(os.environ.get("DECODEW", 6))
+        _cpu.renameWidth = int(os.environ.get("RENAMEW", 6))
+        _cpu.dispatchWidth = int(os.environ.get("DISPATCHW", 6))
+        _cpu.issueWidth = int(os.environ.get("ISSUEW", 12))
+        _cpu.wbWidth = int(os.environ.get("WBW", 12))
+        _cpu.commitWidth = int(os.environ.get("COMMITW", 8))
+        # EMR-class branch predictor: TAGE-SC-L 64KB (closest to Intel's
+        # TAGE-like multi-level BP; gem5 default TournamentBP is far weaker).
+        # O3BP=tournament reverts to the gem5 default.
+        if os.environ.get("O3BP", "tage").lower() == "tage":
+            # v25 BP framework: TAGE_SC_L_64KB is a ConditionalPredictor,
+            # plugged into the BranchPredictor (BPredUnit) container.
+            _cpu.branchPred = BranchPredictor(
+                conditionalBranchPred=TAGE_SC_L_64KB(
+                    numThreads=Parent.numThreads
+                )
+            )
+
+# Create a top-level voltage domain
+system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)
+
+# Create a source clock for the system and set the clock period
+system.clk_domain = SrcClockDomain(
+    clock=args.sys_clock, voltage_domain=system.voltage_domain
+)
+
+# Create a CPU voltage domain
+system.cpu_voltage_domain = VoltageDomain()
+
+# Create a separate clock domain for the CPUs
+system.cpu_clk_domain = SrcClockDomain(
+    clock=args.cpu_clock, voltage_domain=system.cpu_voltage_domain
+)
+
+# If elastic tracing is enabled, then configure the cpu and attach the elastic
+# trace probe
+if args.elastic_trace_en:
+    CpuConfig.config_etrace(CPUClass, system.cpu, args)
+
+# All cpus belong to a common cpu_clk_domain, therefore running at a common
+# frequency.
+for cpu in system.cpu:
+    cpu.clk_domain = system.cpu_clk_domain
+
+if ObjectList.is_kvm_cpu(CPUClass) or ObjectList.is_kvm_cpu(FutureClass):
+    if buildEnv["USE_X86_ISA"]:
+        system.kvm_vm = KvmVM()
+        system.m5ops_base = max(0xFFFF0000, Addr(args.mem_size).getValue())
+        for process in multiprocesses:
+            process.useArchPT = True
+            process.kvmInSE = True
+    else:
+        fatal("KvmCPU can only be used in SE mode with x86")
+
+# Sanity check
+if args.simpoint_profile:
+    if not ObjectList.is_noncaching_cpu(CPUClass):
+        fatal("SimPoint/BPProbe should be done with an atomic cpu")
+    if np > 1:
+        fatal("SimPoint generation not supported with more than one CPUs")
+
+for i in range(np):
+    if args.smt:
+        system.cpu[i].workload = multiprocesses
+    elif len(multiprocesses) == 1:
+        system.cpu[i].workload = multiprocesses[0]
+    else:
+        system.cpu[i].workload = multiprocesses[i]
+
+    if args.simpoint_profile:
+        system.cpu[i].addSimPointProbe(args.simpoint_interval)
+
+    if args.checker:
+        system.cpu[i].addCheckerCpu()
+
+    if args.bp_type:
+        bpClass = ObjectList.bp_list.get(args.bp_type)
+        system.cpu[i].branchPred = bpClass()
+
+    if args.indirect_bp_type:
+        indirectBPClass = ObjectList.indirect_bp_list.get(
+            args.indirect_bp_type
+        )
+        system.cpu[i].branchPred.indirectBranchPred = indirectBPClass()
+
+    system.cpu[i].createThreads()
+
+if args.ruby:
+    Ruby.create_system(args, False, system)
+    assert args.num_cpus == len(system.ruby._cpu_ports)
+
+    # Optional: enable RubySystem-level message-buffer randomization to break
+    # deterministic timing races that cause per-CPU BW asymmetry on slow
+    # cache configs (e.g., Intel 8592). Gated by env var to preserve default.
+    if os.environ.get("RUBY_RANDOMIZATION") == "1":
+        system.ruby.randomization = True
+
+    # Optional: re-seed gem5's RNG (used by MessageBuffer randomization etc).
+    # Different SEED values across runs give different stochastic trajectories
+    # for multi-seed variance experiments.
+    _seed = os.environ.get("SEED")
+    if _seed is not None:
+        import _m5.core
+
+        _m5.core.seedRandom(int(_seed))
+
+    # When CXL emulation is enabled, assign CPU 0's process to DRAM pool
+    # (pool 0) and all other CPUs' processes to CXL pool (pool 1).
+    #
+    # Three env overrides, in descending precedence:
+    #   CPU_POOLS="0,0"  explicit per-CPU pool ids; length must equal num_cpus
+    #   ALL_CXL=1        every process on the CXL pool (1) — used for
+    #                    single-core CXL bandwidth/latency calibration where
+    #                    the sole process must allocate from the CXL range.
+    #   ALL_LOCAL=1      every process on the DRAM pool (0)
+    #
+    # ALL_LOCAL exists so a victim+aggressor pair can be co-placed on local
+    # DRAM while the CXL pool stays configured but unused.  That is the
+    # local-DRAM control behind tab:gem5, and before this override it was
+    # unreachable without editing this file — the default hardcodes cpu1+
+    # onto CXL, and ALL_CXL only moves everyone the other way.  See
+    # experiments/asplos/GATE1_RECONCILIATION.md.
+    #
+    # Keep the precedence in sync with experiments/asplos/gate1_manifest.py's
+    # `mem_pool_policy`, which restates it for the run manifest.
+    if getattr(args, "cxl_mem_size", "0") not in ("0", "0B", "0GiB", "0MiB"):
+
+        def _pool_flag(name):
+            return os.environ.get(name, "0") not in ("0", "", "false", "False")
+
+        all_cxl = _pool_flag("ALL_CXL")
+        all_local = _pool_flag("ALL_LOCAL")
+        if all_cxl and all_local:
+            fatal("ALL_CXL and ALL_LOCAL are mutually exclusive")
+
+        cpu_pools = None
+        _cpu_pools_env = os.environ.get("CPU_POOLS")
+        if _cpu_pools_env:
+            try:
+                cpu_pools = [int(x) for x in _cpu_pools_env.split(",")]
+            except ValueError:
+                fatal(
+                    "CPU_POOLS must be a comma-separated list of pool ids, "
+                    f"got {_cpu_pools_env!r}"
+                )
+            if len(cpu_pools) != np:
+                fatal(
+                    f"CPU_POOLS lists {len(cpu_pools)} pool ids but there are "
+                    f"{np} CPUs"
+                )
+            if any(p not in (0, 1) for p in cpu_pools):
+                fatal(
+                    "CPU_POOLS entries must be 0 (DRAM) or 1 (CXL), got "
+                    f"{cpu_pools}"
+                )
+
+        seen = set()
+        for i in range(np):
+            if cpu_pools is not None:
+                pool_id = cpu_pools[i]
+            elif all_cxl:
+                pool_id = 1
+            elif all_local:
+                pool_id = 0
+            else:
+                pool_id = 0 if i == 0 else 1
+            workload = system.cpu[i].workload
+            if not isinstance(workload, list):
+                workload = [workload]
+            for proc in workload:
+                # A single process shared across CPUs (pthread workloads,
+                # se.py maps multiprocesses[0] to every cpu) must keep the
+                # first assignment (DRAM pool): later CPUs would otherwise
+                # drag the shared heap/stack onto the CXL pool. Per-region
+                # CXL placement is done by the m5 bindpool op instead.
+                if id(proc) in seen:
+                    continue
+                seen.add(id(proc))
+                proc.mem_pool_id = pool_id
+
+    system.ruby.clk_domain = SrcClockDomain(
+        clock=args.ruby_clock, voltage_domain=system.voltage_domain
+    )
+    for i in range(np):
+        ruby_port = system.ruby._cpu_ports[i]
+
+        # Create the interrupt controller and connect its ports to Ruby
+        # Note that the interrupt controller is always present but only
+        # in x86 does it have message ports that need to be connected
+        system.cpu[i].createInterruptController()
+
+        # Connect the cpu's cache ports to Ruby
+        ruby_port.connectCpuPorts(system.cpu[i])
+else:
+    MemClass = Simulation.setMemClass(args)
+    system.membus = SystemXBar()
+    system.system_port = system.membus.cpu_side_ports
+    CacheConfig.config_cache(args, system)
+    MemConfig.config_mem(args, system)
+    config_filesystem(system, args)
+
+system.workload = SEWorkload.init_compatible(mp0_path)
+
+if args.wait_gdb:
+    system.workload.wait_for_remote_gdb = True
+
+root = Root(full_system=False, system=system)
+Simulation.run(args, root, system, FutureClass)
