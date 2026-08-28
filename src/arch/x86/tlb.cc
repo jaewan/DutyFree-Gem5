@@ -509,6 +509,7 @@ TLB::translate(const RequestPtr &req,
                 req->setFlags(Request::UNCACHEABLE | Request::STRICT_ORDER);
             if (entry->streaming) {
                 req->setCacheCoherenceFlags(Request::STREAMING_BIT);
+                stats.streamingAccesses++;
                 DPRINTF(TLB, "STREAMING_BIT set for vaddr %#x -> paddr %#x\n",
                         vaddr, paddr);
             }
@@ -614,7 +615,9 @@ TLB::TlbStats::TlbStats(statistics::Group *parent)
       ADD_STAT(wrMisses, statistics::units::Count::get(),
                "TLB misses on write requests"),
       ADD_STAT(exMisses, statistics::units::Count::get(),
-               "TLB misses on execute (instr) requests")
+               "TLB misses on execute (instr) requests"),
+      ADD_STAT(streamingAccesses, statistics::units::Count::get(),
+               "Translated accesses carrying the STREAMING request bit")
 {
 }
 

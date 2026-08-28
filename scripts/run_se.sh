@@ -52,8 +52,8 @@ launch_one() {
     w1o)  run_w1 w1o "" ;;
     w1ls) run_w1 w1ls "--line-stride" ;;
     w2)   run_gem5 $ROOT/logs/se_chi/se_w2_${N}c probe-workload wb "--hot-bytes $HOT" "" "" $N $N "0-$((N-1))" ;;
-    w3)   run_gem5 $ROOT/logs/se_chi/se_w3_${N}c morsel wb     "--hot-bytes $HOT --morsel 1m --check" "" "" $((N+1)) $N "0-$N" ;;
-    w4)   run_gem5 $ROOT/logs/se_chi/se_w4_${N}c morsel stream "--hot-bytes $HOT --morsel 1m --check" "" "" $((N+1)) $N "0-$N" ;;
+    w3)   run_gem5 $ROOT/logs/se_chi/se_w3_${N}c morsel wb     "--hot-bytes $HOT --morsel 1m --check" "" "" $N $N "0-$((N-1))" ;;
+    w4)   run_gem5 $ROOT/logs/se_chi/se_w4_${N}c morsel stream "--hot-bytes $HOT --morsel 1m --check" "" "" $N $N "0-$((N-1))" ;;
     *) echo "unknown workload: $wl"; exit 1 ;;
   esac
 }

@@ -281,7 +281,9 @@ class CHI_L1Controller(Base_CHI_Cache_Controller):
         self.alloc_on_readonce = True
         # H3: participate in the STREAMING no-footprint bypass so streaming
         # reads are issued as ReadOnce (no L1/L2 retention). Off unless HNF_H3=1.
-        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
+        self.enable_H3_streaming_bypass = bool(
+            int(os.environ.get("HNF_H3", 0))
+        )
         self.alloc_on_writeback = True
         self.alloc_on_atomic = False
         self.dealloc_on_unique = False
@@ -329,7 +331,9 @@ class CHI_L2Controller(Base_CHI_Cache_Controller):
         self.alloc_on_readonce = True
         # H3: participate in the STREAMING no-footprint bypass so streaming
         # reads are issued as ReadOnce (no L1/L2 retention). Off unless HNF_H3=1.
-        self.enable_H3_streaming_bypass = bool(int(os.environ.get("HNF_H3", 0)))
+        self.enable_H3_streaming_bypass = bool(
+            int(os.environ.get("HNF_H3", 0))
+        )
         self.alloc_on_writeback = True
         self.alloc_on_atomic = False
         self.dealloc_on_unique = False
@@ -388,19 +392,25 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_H3_streaming_bypass = bool(
             int(os.environ.get("HNF_H3", 0))
         )
-        # HNF_FWD_UNIQUE=1: a ReadShared hitting a UC/UD line at the HNF is
-        # answered with unique state (real x86 grants E to a sole reader);
-        # default 0 keeps the gem5 CHI default (grant SC) = today's behavior.
+        # HNF_FWD_UNIQUE: a ReadShared hitting a UC/UD line at the HNF is
+        # answered with unique state (real x86 MESIF grants E to a sole
+        # reader). Default 1 since 2026-08-14: the gem5 CHI default (grant
+        # SC) permanently exiles a victim's clean lines from the NINE LLC
+        # after their first eviction (SC evicts are silent, no refill path),
+        # inflating the onset-region tax (mini 25p: 1.63 vs 1.29; 53p+ and
+        # H2/BW unaffected — see 9_shared_vs_distinct.md A/B).
+        # HNF_FWD_UNIQUE=0 restores the old SC behavior.
         self.fwd_unique_on_readshared = bool(
-            int(os.environ.get("HNF_FWD_UNIQUE", 0))
+            int(os.environ.get("HNF_FWD_UNIQUE", 1))
         )
         # Cross-guard: the finite-SF dir-allocation deferral (CheckSFFill) is
         # incompatible with the DMT read pipeline (SendReadNoSnpDMT sequencing),
         # and finite-SF misses often, firing the DMT branch constantly. Forgetting
         # HNF_DMT=0 would silently exercise that untested combination and could
         # corrupt results with no crash. Fail loudly instead.
-        assert not (self.sf_finite and self.enable_DMT), \
-            "finite SF (HNF_SF_FINITE=1) requires DMT off (HNF_DMT=0)"
+        assert not (
+            self.sf_finite and self.enable_DMT
+        ), "finite SF (HNF_SF_FINITE=1) requires DMT off (HNF_DMT=0)"
         # Some reasonable default TBE params (env HNF_MSHR, unset=32)
         self.number_of_TBEs = int(os.environ.get("HNF_MSHR", 32))
         self.number_of_repl_TBEs = 32
@@ -557,10 +567,12 @@ class CHI_RNF(CHI_Node):
         self._cpus = cpus
 
         # First creates L1 caches and sequencers
-        # SEQ_OUT: sequencer max_outstanding_requests. The gem5 default
-        # (16, counted per load) throttles streaming MLP; keep it
-        # non-binding and let L1/L2 MSHRs be the real limit.
-        _seq_out = int(os.environ.get("SEQ_OUT", 1024))
+        # SEQ_OUT: sequencer max_outstanding_requests (counted per load).
+        # Default 32 (2026-08-19): LFB-like limit. The 16..1024 sweep showed
+        # victim tax/H2 insensitive; only the demand-only WC arm needs a
+        # bounded sequencer for its low-BW contrast (>=128 is non-binding
+        # and WC collapses to WB-level BW). Override via env for sweeps.
+        _seq_out = int(os.environ.get("SEQ_OUT", 32))
         for cpu in self._cpus:
             cpu.inst_sequencer = RubySequencer(
                 version=Versions.getSeqId(), ruby_system=ruby_system
@@ -803,7 +815,8 @@ class CHI_HNF(CHI_Node):
             sf_ways = int(os.environ.get("HNF_SF_WAYS", 16))
             sf_sets = int(os.environ.get("HNF_SF_SETS", 1 << 16))
             self._cntrl.sf = SFDirectory(
-                size=str(sf_sets * sf_ways * 64) + "B",  # MemorySize wants a str; 64B/line
+                size=str(sf_sets * sf_ways * 64)
+                + "B",  # MemorySize wants a str; 64B/line
                 assoc=sf_ways,
                 start_index_bit=intlvHighBit + 1,
             )

@@ -510,10 +510,12 @@ class CHI_RNF(CHI_Node):
         self._cpus = cpus
 
         # First creates L1 caches and sequencers
-        # SEQ_OUT: sequencer max_outstanding_requests. The gem5 default
-        # (16, counted per load) throttles streaming MLP; keep it
-        # non-binding and let L1/L2 MSHRs be the real limit.
-        _seq_out = int(os.environ.get("SEQ_OUT", 1024))
+        # SEQ_OUT: sequencer max_outstanding_requests (counted per load).
+        # Default 32 (2026-08-19): LFB-like limit. The 16..1024 sweep showed
+        # victim tax/H2 insensitive; only the demand-only WC arm needs a
+        # bounded sequencer for its low-BW contrast (>=128 is non-binding
+        # and WC collapses to WB-level BW). Override via env for sweeps.
+        _seq_out = int(os.environ.get("SEQ_OUT", 32))
         for cpu in self._cpus:
             cpu.inst_sequencer = RubySequencer(
                 version=Versions.getSeqId(), ruby_system=ruby_system
