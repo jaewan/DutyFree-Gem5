@@ -292,7 +292,14 @@ class CHI_L1Controller(Base_CHI_Cache_Controller):
         self.dealloc_backinv_shared = True
         # Some reasonable default TBE params (env L1_MSHR, unset=16)
         self.number_of_TBEs = int(os.environ.get("L1_MSHR", 16))
-        self.number_of_repl_TBEs = 16
+        # Replacement-path depth (env L1_REPL). Default 16 so an unset
+        # environment reproduces today's behavior exactly. Sweeping L1_MSHR
+        # alone starves this path relative to the request path (64 vs 16),
+        # and the STREAMING attribute has to survive the eviction path
+        # (cache_entry.isStreaming -> TBE -> WriteEvictFull) to be honoured
+        # at the HNF -- so this is a candidate cause of H2 fill-suppression
+        # degrading at high L1_MSHR.
+        self.number_of_repl_TBEs = int(os.environ.get("L1_REPL", 16))
         self.number_of_snoop_TBEs = 4
         self.number_of_DVM_TBEs = 16
         self.number_of_DVM_snoop_TBEs = 4
@@ -335,7 +342,9 @@ class CHI_L2Controller(Base_CHI_Cache_Controller):
         self.dealloc_backinv_shared = True
         # L2 superqueue ~48 on SPR/EMR (env L2_MSHR)
         self.number_of_TBEs = int(os.environ.get("L2_MSHR", 48))
-        self.number_of_repl_TBEs = 32
+        # Replacement-path depth (env L2_REPL); default 32 preserves today's
+        # behavior when unset. See the L1_REPL note above.
+        self.number_of_repl_TBEs = int(os.environ.get("L2_REPL", 32))
         self.number_of_snoop_TBEs = 16
         self.number_of_DVM_TBEs = 1  # should not receive any dvm
         self.number_of_DVM_snoop_TBEs = 1  # should not receive any dvm
@@ -772,6 +781,27 @@ class CHI_HNF(CHI_Node):
         assert len(addr_ranges) >= 1
 
         ll_cache = llcache_type(start_index_bit=intlvHighBit + 1)
+
+        # LLC replacement policy (env HNF_RP). Unset keeps whatever
+        # llcache_type specifies; RubyCache's default is TreePLRURP, which is
+        # what every published number in this project was produced with -- so
+        # an unset environment reproduces prior behaviour exactly, and any
+        # comparison must name TreePLRU rather than assume LRU.
+        #
+        # #28 needs a reuse predictor at the LLC to compare declaration
+        # against prediction. SHiP is the only one in this tree (Hawkeye and
+        # Mockingjay are absent). SHiPMemRP, not SHiPPCRP: Ruby requests do
+        # not reliably carry a PC for a PC-indexed signature.
+        _rp = os.environ.get("HNF_RP", "").strip().lower()
+        if _rp in ("ship", "ship_mem", "shipmem"):
+            ll_cache.replacement_policy = SHiPMemRP()
+        elif _rp == "brrip":
+            ll_cache.replacement_policy = BRRIPRP()
+        elif _rp == "lru":
+            ll_cache.replacement_policy = LRURP()
+        elif _rp not in ("", "default", "treeplru", "tree_plru"):
+            m5.fatal("unknown HNF_RP=%s (ship|brrip|lru|treeplru)", _rp)
+
         self._cntrl = CHI_HNFController(
             ruby_system, ll_cache, NULL, addr_ranges
         )

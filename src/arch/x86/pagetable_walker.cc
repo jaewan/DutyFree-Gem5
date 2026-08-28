@@ -520,6 +520,13 @@ Walker::WalkerState::stepWalk(PacketPtr &write)
         panic("Unknown page table walker state %d!\n");
     }
     if (doEndWalk) {
+        // Count the classification at the only point where the walker has
+        // validated a terminal PTE and is about to install the translation.
+        // This is intentionally distinct from a TLB access counter: repeated
+        // accesses to one cached translation must not masquerade as multiple
+        // OS->PTE classifications.
+        if (doTLBInsert && entry.streaming)
+            walker->stats.streamingTranslations++;
         if (doTLBInsert)
             if (!functional) {
 

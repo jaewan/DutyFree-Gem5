@@ -48,6 +48,7 @@
 #include "params/X86PagetableWalker.hh"
 #include "sim/clocked_object.hh"
 #include "sim/faults.hh"
+#include "sim/stats.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -178,6 +179,17 @@ namespace X86ISA
         // The number of outstanding walks that can be squashed per cycle.
         unsigned numSquashable;
 
+        struct WalkerStats : public statistics::Group
+        {
+            WalkerStats(statistics::Group *parent)
+                : statistics::Group(parent),
+                  ADD_STAT(streamingTranslations, statistics::units::Count::get(),
+                           "Completed page-table walks classified as STREAMING")
+            {}
+
+            statistics::Scalar streamingTranslations;
+        } stats;
+
         // Wrapper for checking for squashes before starting a translation.
         void startWalkWrapper();
 
@@ -205,6 +217,7 @@ namespace X86ISA
             funcState(this, NULL, NULL, true), tlb(NULL), sys(params.system),
             requestorId(sys->getRequestorId(this)),
             numSquashable(params.num_squash_per_cycle),
+            stats(this),
             startWalkWrapperEvent([this]{ startWalkWrapper(); }, name())
         {
         }
