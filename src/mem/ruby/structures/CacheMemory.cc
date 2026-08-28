@@ -83,6 +83,8 @@ CacheMemory::CacheMemory(const Params &p)
     m_resource_stalls = p.resourceStalls;
     m_block_size = p.block_size;  // may be 0 at this point. Updated in init()
     m_way_mask = p.way_mask;      // 0 = unpartitioned; applied in init()
+    m_requestor_masks.assign(p.requestor_masks.begin(),
+                             p.requestor_masks.end());
     m_use_occupancy = dynamic_cast<replacement_policy::WeightedLRU*>(
                                     m_replacementPolicy_ptr) ? true : false;
 }
@@ -134,6 +136,34 @@ CacheMemory::init()
         setClosWayMask(0, m_way_mask);
         inform("CacheMemory %s: way-partitioned to mask %#x of %d ways",
                name(), m_way_mask, m_cache_assoc);
+    }
+
+    // Per-requestor masks. CLOS ids are deliberately offset by one so that CLOS
+    // 0 is never given a mask: wayMaskFor() resolves an unlisted requestor to
+    // CLOS 0 and, finding no mask there, returns all ways. Without the offset a
+    // mask on requestor 0 would silently become the default for every requestor.
+    bool any_requestor_mask = false;
+    for (uint64_t m : m_requestor_masks)
+        any_requestor_mask |= (m != 0);
+    if (any_requestor_mask) {
+        fatal_if(dynamic_cast<replacement_policy::TreePLRU*>(
+                     m_replacementPolicy_ptr) != nullptr,
+                 "CacheMemory %s: per-requestor way partitioning is incompatible "
+                 "with TreePLRU, which cannot accept a candidate subset. Use "
+                 "LRURP, BRRIPRP or RandomRP on a partitioned cache.", name());
+        for (int i = 0; i < (int)m_requestor_masks.size(); i++) {
+            if (m_requestor_masks[i] == 0)
+                continue;
+            fatal_if(m_cache_assoc < 64 &&
+                     (m_requestor_masks[i] >> m_cache_assoc) != 0,
+                     "CacheMemory %s: requestor %d mask %#x names ways outside "
+                     "the %d-way array", name(), i, m_requestor_masks[i],
+                     m_cache_assoc);
+            setRequestorClos(i, i + 1);
+            setClosWayMask(i + 1, m_requestor_masks[i]);
+            inform("CacheMemory %s: requestor %d confined to mask %#x of %d ways",
+                   name(), i, m_requestor_masks[i], m_cache_assoc);
+        }
     }
 
     m_cache.resize(m_cache_num_sets,

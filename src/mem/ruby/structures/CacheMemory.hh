@@ -238,6 +238,11 @@ class CacheMemory : public SimObject
      * requestor resolves to the all-ways mask and behaviour is unchanged.
      */
     uint64_t m_way_mask = 0;   ///< config-time mask; 0 = unpartitioned
+    /// Per-requestor config-time masks, indexed by requestor NodeID; a 0
+    /// entry leaves that requestor unrestricted. This is what Intel CAT
+    /// and Arm MPAM actually do -- different agents get different masks --
+    /// as distinct from m_way_mask, which shrinks the cache for everyone.
+    std::vector<uint64_t> m_requestor_masks;
     std::unordered_map<int, uint64_t> m_clos_way_mask;
     std::unordered_map<int, int> m_requestor_clos;
     uint64_t m_all_ways_mask = 0;

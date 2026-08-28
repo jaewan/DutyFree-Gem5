@@ -58,6 +58,9 @@ class RubyCache(SimObject):
     # cache, which is what a verification run and a single-tenant experiment need.
     # Per-requestor masks remain available via setClosWayMask/setRequestorClos.
     way_mask = Param.UInt64(0, "way bitmask for all requestors; 0 = all ways")
+    # Per-requestor masks, indexed by requestor NodeID; 0 = unrestricted.
+    # This is the CAT/MPAM shape: different agents, different masks.
+    requestor_masks = VectorParam.UInt64([], "per-requestor way bitmasks")
     block_size = Param.MemorySize(
         "0B", "block size in bytes. 0 means default RubyBlockSize"
     )

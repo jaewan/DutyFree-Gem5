@@ -812,6 +812,42 @@ class CHI_HNF(CHI_Node):
         # against prediction. SHiP is the only one in this tree (Hawkeye and
         # Mockingjay are absent). SHiPMemRP, not SHiPPCRP: Ruby requests do
         # not reliably carry a PC for a PC-indexed signature.
+        # HNF_REQ_MASKS: per-requestor LLC way masks, "node:mask[,node:mask]".
+        # This is the Intel CAT / Arm MPAM shape -- different agents get
+        # different masks -- and is what the silicon experiments did (confine the
+        # streaming tenant, leave the neighbour all ways). Requestor NodeIDs are
+        # the CHI cache-controller versions, readable from any run's config.ini;
+        # in the 2-CPU configuration cpu0.l2 is 4 and cpu1.l2 is 5, and those are
+        # the two agents whose requests reach the HNF.
+        #
+        # Masking forces LRU: CacheMemory::init() refuses TreePLRU on a
+        # partitioned cache, because a candidate subset overruns its tree.
+        _req_masks = os.environ.get("HNF_REQ_MASKS", "").strip()
+        if _req_masks:
+            _pairs = []
+            for _tok in _req_masks.split(","):
+                _tok = _tok.strip()
+                if not _tok:
+                    continue
+                if ":" not in _tok:
+                    m5.fatal("HNF_REQ_MASKS entry %s is not node:mask", _tok)
+                _n, _m = _tok.split(":", 1)
+                _pairs.append((int(_n, 0), int(_m, 0)))
+            _vec = [0] * (max(n for n, _ in _pairs) + 1)
+            for _n, _m in _pairs:
+                _vec[_n] = _m
+            # Refuse rather than silently substitute, matching L1D_RP: a silent
+            # swap would make the run answer a different question than the one
+            # asked, and CacheMemory::init() would fatal on the pairing anyway.
+            if os.environ.get("HNF_RP", "").strip().lower() in (
+                    "treeplru", "tree_plru"):
+                m5.fatal("HNF_RP=treeplru is incompatible with HNF_REQ_MASKS=%s",
+                         _req_masks)
+            ll_cache.requestor_masks = _vec
+            ll_cache.replacement_policy = LRURP()
+            print("HNF per-requestor way masks: %s" %
+                  ", ".join("node%d=%#x" % (n, m) for n, m in _pairs))
+
         _rp = os.environ.get("HNF_RP", "").strip().lower()
         if _rp in ("ship", "ship_mem", "shipmem"):
             ll_cache.replacement_policy = SHiPMemRP()
