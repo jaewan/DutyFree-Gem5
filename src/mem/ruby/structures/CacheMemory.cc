@@ -108,6 +108,10 @@ CacheMemory::init()
     m_cache_num_set_bits = floorLog2(m_cache_num_sets);
     assert(m_cache_num_set_bits > 0);
 
+    // Way-partitioning audit stat: one bucket per way. Sized here because
+    // m_cache_assoc is only meaningful after construction.
+    cacheMemoryStats.m_allocsByWay.init(m_cache_assoc);
+
     m_cache.resize(m_cache_num_sets,
                     std::vector<AbstractCacheEntry*>(m_cache_assoc, nullptr));
     replacement_data.resize(m_cache_num_sets,
@@ -362,6 +366,138 @@ CacheMemory::cacheProbe(Addr address) const
                         getVictim(candidates)->getWay()]->m_Address;
 }
 
+// ---------------------------------------------------------------------------
+// Way partitioning (Intel CAT / Arm MPAM style).
+//
+// Rationale for touching three functions rather than one: a way mask must
+// constrain (a) whether a set is considered to have room, (b) where a line is
+// placed, and (c) which lines are eligible victims. Constraining only (b) would
+// let a confined requestor evict outside its mask, which is precisely the
+// interference the mechanism exists to prevent.
+// ---------------------------------------------------------------------------
+
+void
+CacheMemory::setClosWayMask(int clos, uint64_t way_mask)
+{
+    // Reject a mask with no ways: CAT hardware forbids an all-zero CBM, and a
+    // requestor that may allocate nowhere would deadlock the fill path rather
+    // than degrade.
+    fatal_if(way_mask == 0,
+             "CacheMemory %s: CLOS %d given an all-zero way mask; hardware "
+             "forbids this and the fill path cannot make progress.",
+             name(), clos);
+    uint64_t all = (m_cache_assoc >= 64) ? ~0ULL
+                                         : ((1ULL << m_cache_assoc) - 1);
+    fatal_if((way_mask & ~all) != 0,
+             "CacheMemory %s: CLOS %d mask %#x selects ways beyond assoc %d.",
+             name(), clos, way_mask, m_cache_assoc);
+    m_clos_way_mask[clos] = way_mask;
+}
+
+void
+CacheMemory::setRequestorClos(int requestor, int clos)
+{
+    m_requestor_clos[requestor] = clos;
+}
+
+uint64_t
+CacheMemory::wayMaskFor(int requestor) const
+{
+    if (m_clos_way_mask.empty()) {
+        // Fast path: partitioning never configured.
+        return (m_cache_assoc >= 64) ? ~0ULL : ((1ULL << m_cache_assoc) - 1);
+    }
+    int clos = 0;
+    auto rit = m_requestor_clos.find(requestor);
+    if (rit != m_requestor_clos.end())
+        clos = rit->second;
+    auto mit = m_clos_way_mask.find(clos);
+    if (mit != m_clos_way_mask.end())
+        return mit->second;
+    return (m_cache_assoc >= 64) ? ~0ULL : ((1ULL << m_cache_assoc) - 1);
+}
+
+bool
+CacheMemory::cacheAvailMasked(Addr address, int requestor) const
+{
+    assert(address == makeLineAddress(address));
+    uint64_t mask = wayMaskFor(requestor);
+    int64_t cacheSet = addressToCacheSet(address);
+
+    for (int i = 0; i < m_cache_assoc; i++) {
+        AbstractCacheEntry* entry = m_cache[cacheSet][i];
+        if (entry != NULL) {
+            // A tag match counts as available regardless of mask: the line is
+            // already here, and CAT constrains allocation, not lookup or hits.
+            if (entry->m_Address == address)
+                return true;
+            if ((mask & (1ULL << i)) &&
+                entry->m_Permission == AccessPermission_NotPresent)
+                return true;
+        } else if (mask & (1ULL << i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+AbstractCacheEntry*
+CacheMemory::allocateMasked(Addr address, AbstractCacheEntry *entry,
+                            int requestor)
+{
+    assert(address == makeLineAddress(address));
+    assert(!isTagPresent(address));
+    assert(cacheAvailMasked(address, requestor));
+    DPRINTF(RubyCache, "allocating address: %#x (masked)\n", address);
+
+    uint64_t mask = wayMaskFor(requestor);
+    entry->initBlockSize(m_block_size);
+    entry->setRubySystem(m_ruby_system);
+
+    int64_t cacheSet = addressToCacheSet(address);
+    std::vector<AbstractCacheEntry*> &set = m_cache[cacheSet];
+    for (int i = 0; i < m_cache_assoc; i++) {
+        if (!(mask & (1ULL << i)))
+            continue;
+        if (!set[i] || set[i]->m_Permission == AccessPermission_NotPresent) {
+            set[i] = entry;
+            set[i]->m_Address = address;
+            set[i]->m_Permission = AccessPermission_Invalid;
+            set[i]->m_locked = -1;
+            m_tag_index[address] = i;
+            set[i]->setPosition(cacheSet, i);
+            set[i]->replacementData = replacement_data[cacheSet][i];
+            set[i]->setLastAccess(curTick());
+            m_replacementPolicy_ptr->reset(entry->replacementData);
+            cacheMemoryStats.m_allocsByWay[i]++;
+            return entry;
+        }
+    }
+    panic("allocateMasked didn't find an available entry within the mask");
+}
+
+Addr
+CacheMemory::cacheProbeMasked(Addr address, int requestor) const
+{
+    assert(address == makeLineAddress(address));
+    assert(!cacheAvailMasked(address, requestor));
+
+    uint64_t mask = wayMaskFor(requestor);
+    int64_t cacheSet = addressToCacheSet(address);
+    std::vector<ReplaceableEntry*> candidates;
+    for (int i = 0; i < m_cache_assoc; i++) {
+        if (mask & (1ULL << i)) {
+            candidates.push_back(static_cast<ReplaceableEntry*>(
+                                                    m_cache[cacheSet][i]));
+        }
+    }
+    // cacheAvailMasked() returning false guarantees every masked way is
+    // occupied, so the candidate list is non-empty.
+    assert(!candidates.empty());
+    return m_cache[cacheSet][m_replacementPolicy_ptr->
+                        getVictim(candidates)->getWay()]->m_Address;
+}
+
 // looks an address up in the cache
 AbstractCacheEntry*
 CacheMemory::lookup(Addr address)
@@ -554,6 +690,7 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
       ADD_STAT(numTagArrayWrites, "Number of tag array writes"),
       ADD_STAT(numTagArrayStalls, "Number of stalls caused by tag array"),
       ADD_STAT(numDataArrayStalls, "Number of stalls caused by data array"),
+      ADD_STAT(m_allocsByWay, "Lines placed in each way (way-partitioning audit)"),
       ADD_STAT(numAtomicALUOperations, "Number of atomic ALU operations"),
       ADD_STAT(numAtomicALUArrayStalls, "Number of stalls caused by atomic ALU array"),
       ADD_STAT(htmTransCommitReadSet, "Read set size of a committed "
@@ -636,6 +773,7 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
             .flags(statistics::nozero)
             ;
     }
+    // sized in CacheMemory::init(), where m_cache_assoc is known
 }
 
 // assumption: SLICC generated files will only call this function

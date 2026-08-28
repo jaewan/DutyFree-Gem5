@@ -91,6 +91,23 @@ class CacheMemory : public SimObject
     //   b) an unused line in the same cache "way"
     bool cacheAvail(Addr address) const;
 
+    // ---- Way partitioning (Intel CAT / Arm MPAM style) --------------------
+    // A CLOS is a numbered policy slot; its policy here is a bitmask over ways.
+    // Requestors are mapped to a CLOS; unmapped requestors get CLOS 0, whose
+    // mask defaults to all ways. With no mask ever set, every path below is
+    // bit-identical to the unpartitioned code.
+    void setClosWayMask(int clos, uint64_t way_mask);
+    void setRequestorClos(int requestor, int clos);
+    uint64_t wayMaskFor(int requestor) const;
+
+    // Mask-aware variants. `requestor` selects the CLOS; allocation and victim
+    // selection are confined to that CLOS's ways.
+    bool cacheAvailMasked(Addr address, int requestor) const;
+    AbstractCacheEntry* allocateMasked(Addr address,
+                                       AbstractCacheEntry* new_entry,
+                                       int requestor);
+    Addr cacheProbeMasked(Addr address, int requestor) const;
+
     // Returns a NULL entry that acts as a placeholder for invalid lines
     AbstractCacheEntry*
     getNullEntry() const
@@ -214,6 +231,16 @@ class CacheMemory : public SimObject
 
     RubySystem *m_ruby_system = nullptr;
 
+    /**
+     * Way partitioning state. m_clos_way_mask[c] is the set of ways CLOS c may
+     * allocate into; bit i set means way i is permitted. m_requestor_clos maps a
+     * RequestorID/NodeID to a CLOS. Both are empty by default, which means every
+     * requestor resolves to the all-ways mask and behaviour is unchanged.
+     */
+    std::unordered_map<int, uint64_t> m_clos_way_mask;
+    std::unordered_map<int, int> m_requestor_clos;
+    uint64_t m_all_ways_mask = 0;
+
     Addr
     makeLineAddress(Addr addr) const
     {
@@ -232,6 +259,15 @@ class CacheMemory : public SimObject
 
           statistics::Scalar numTagArrayStalls;
           statistics::Scalar numDataArrayStalls;
+
+          /**
+           * Way partitioning observability. m_allocsByWay[i] counts lines
+           * placed in way i. With a CLOS confined to a mask, the ways outside
+           * that mask must read exactly zero -- which makes mask enforcement
+           * auditable straight from stats.txt rather than argued from the
+           * source.
+           */
+          statistics::Vector m_allocsByWay;
 
           statistics::Scalar numAtomicALUOperations;
           statistics::Scalar numAtomicALUArrayStalls;

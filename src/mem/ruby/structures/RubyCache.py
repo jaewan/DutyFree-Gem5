@@ -26,6 +26,7 @@
 
 from m5.objects.ReplacementPolicies import *
 from m5.params import *
+from m5.SimObject import PyBindMethod
 from m5.proxy import *
 from m5.SimObject import SimObject
 
@@ -33,6 +34,16 @@ from m5.SimObject import SimObject
 class RubyCache(SimObject):
     type = "RubyCache"
     cxx_class = "gem5::ruby::CacheMemory"
+    cxx_exports = [
+        # Way partitioning (Intel CAT / Arm MPAM style). Call from a config
+        # script after instantiation:
+        #   llc.setClosWayMask(1, 0x0ff)      # CLOS 1 may use ways 0-7
+        #   llc.setRequestorClos(rid, 1)      # requestor rid uses CLOS 1
+        # With neither called, every requestor gets the all-ways mask and the
+        # cache behaves exactly as before.
+        PyBindMethod("setClosWayMask"),
+        PyBindMethod("setRequestorClos"),
+    ]
     cxx_header = "mem/ruby/structures/CacheMemory.hh"
 
     size = Param.MemorySize("capacity in bytes")

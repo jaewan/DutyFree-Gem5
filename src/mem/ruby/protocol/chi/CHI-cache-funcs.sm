@@ -820,6 +820,18 @@ void printResources() {
                 triggerQueue.getSize(curTick()));
 }
 
+// Way partitioning: resolve the requestor identity the LLC should charge this
+// fill to. CAT is keyed on execution context, so we use the CHI requestor -- the
+// RNF that issued the request -- not the address. Returns a small int that
+// CacheMemory maps to a CLOS; with no mask configured the value is ignored.
+NodeID closRequestor(TBE tbe) {
+  // Caller (CheckCacheFill) asserts is_valid(tbe) before reaching the fill
+  // path, so no fallback branch is needed -- and NodeID is a SLICC primitive
+  // with no int-literal conversion, so a `return 0` would not compile anyway.
+  assert(is_valid(tbe));
+  return machineIDToNodeID(tbe.requestor);
+}
+
 bool needCacheEntry(CHIRequestType req_type,
                     CacheEntry cache_entry, DirEntry dir_entry,
                     bool is_prefetch, bool is_streaming) {

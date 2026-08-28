@@ -212,6 +212,11 @@ structure (DirectoryMemory, external = "yes") {
 structure (CacheMemory, external = "yes") {
   bool cacheAvail(Addr);
   Addr cacheProbe(Addr);
+  // Way partitioning: the int is a requestor id, mapped to a CLOS whose mask
+  // confines allocation and victim selection. See CacheMemory::wayMaskFor.
+  bool cacheAvailMasked(Addr, NodeID);
+  Addr cacheProbeMasked(Addr, NodeID);
+  AbstractCacheEntry allocateMasked(Addr, AbstractCacheEntry, NodeID);
   AbstractCacheEntry getNullEntry();
   AbstractCacheEntry allocate(Addr, AbstractCacheEntry);
   AbstractCacheEntry allocate(Addr, AbstractCacheEntry, bool);
