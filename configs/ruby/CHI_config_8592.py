@@ -71,9 +71,19 @@ class L1DCache(RubyCache):
     # requestor in this cache to those ways. 0/unset leaves it unpartitioned.
     way_mask = int(os.environ.get("L1D_MASK", "0"), 0)
     # TreePLRU cannot take a candidate subset, so a partitioned cache needs a
-    # linearly-scanned policy. Only switched when a mask is actually set, so the
-    # unpartitioned baseline keeps the default and stays comparable to prior runs.
-    if way_mask != 0:
+    # linearly-scanned policy. L1D_RP forces the policy independently of the
+    # mask, so a masked arm can be compared against a POLICY-MATCHED unmasked
+    # baseline instead of against the TreePLRU default -- without it, a
+    # masked-vs-unmasked delta conflates partitioning with the policy swap.
+    _l1d_rp = os.environ.get("L1D_RP", "").strip().lower()
+    if _l1d_rp not in ("", "default", "lru", "treeplru", "tree_plru"):
+        m5.fatal("unknown L1D_RP=%s (lru|treeplru)", _l1d_rp)
+    if _l1d_rp in ("treeplru", "tree_plru") and way_mask != 0:
+        # Refuse rather than silently substitute: CacheMemory::init() would
+        # fatal on this pairing anyway, and a silent swap would make the run
+        # answer a different question than the one asked.
+        m5.fatal("L1D_RP=treeplru is incompatible with L1D_MASK=%#x", way_mask)
+    if _l1d_rp == "lru" or way_mask != 0:
         replacement_policy = LRURP()
 
     # end-to-end calibrated 2026-07-06: measured 2.6ns load-to-use (EMR);
