@@ -237,6 +237,7 @@ class CacheMemory : public SimObject
      * RequestorID/NodeID to a CLOS. Both are empty by default, which means every
      * requestor resolves to the all-ways mask and behaviour is unchanged.
      */
+    uint64_t m_way_mask = 0;   ///< config-time mask; 0 = unpartitioned
     std::unordered_map<int, uint64_t> m_clos_way_mask;
     std::unordered_map<int, int> m_requestor_clos;
     uint64_t m_all_ways_mask = 0;

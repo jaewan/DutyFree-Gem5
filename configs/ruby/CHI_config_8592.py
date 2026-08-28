@@ -1,3 +1,4 @@
+import os
 # Copyright (c) 2021-2024 Arm Limited
 # All rights reserved.
 #
@@ -66,6 +67,15 @@ class L1ICache(RubyCache):
 
 
 class L1DCache(RubyCache):
+    # Verification hook for way partitioning: L1D_MASK=<hex> confines every
+    # requestor in this cache to those ways. 0/unset leaves it unpartitioned.
+    way_mask = int(os.environ.get("L1D_MASK", "0"), 0)
+    # TreePLRU cannot take a candidate subset, so a partitioned cache needs a
+    # linearly-scanned policy. Only switched when a mask is actually set, so the
+    # unpartitioned baseline keeps the default and stays comparable to prior runs.
+    if way_mask != 0:
+        replacement_policy = LRURP()
+
     # end-to-end calibrated 2026-07-06: measured 2.6ns load-to-use (EMR);
     # path overhead eats most of it, so the array itself is nearly free
     dataAccessLatency = 1

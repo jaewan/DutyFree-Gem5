@@ -51,6 +51,13 @@ class RubyCache(SimObject):
     replacement_policy = Param.BaseReplacementPolicy(TreePLRURP(), "")
     start_index_bit = Param.Int(6, "index start, default 6 for 64-byte line")
     is_icache = Param.Bool(False, "is instruction only cache")
+
+    # Way partitioning applied at construction. 0 means unpartitioned (all ways),
+    # which is the default and leaves behaviour unchanged. A non-zero value is a
+    # bitmask over ways applied to every requestor -- enough to confine a whole
+    # cache, which is what a verification run and a single-tenant experiment need.
+    # Per-requestor masks remain available via setClosWayMask/setRequestorClos.
+    way_mask = Param.UInt64(0, "way bitmask for all requestors; 0 = all ways")
     block_size = Param.MemorySize(
         "0B", "block size in bytes. 0 means default RubyBlockSize"
     )

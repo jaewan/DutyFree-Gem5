@@ -41,6 +41,8 @@
 
 #include "mem/ruby/structures/CacheMemory.hh"
 
+#include "mem/cache/replacement_policies/tree_plru_rp.hh"
+
 #include "base/intmath.hh"
 #include "base/logging.hh"
 #include "debug/HtmMem.hh"
@@ -80,6 +82,7 @@ CacheMemory::CacheMemory(const Params &p)
     m_is_instruction_only_cache = p.is_icache;
     m_resource_stalls = p.resourceStalls;
     m_block_size = p.block_size;  // may be 0 at this point. Updated in init()
+    m_way_mask = p.way_mask;      // 0 = unpartitioned; applied in init()
     m_use_occupancy = dynamic_cast<replacement_policy::WeightedLRU*>(
                                     m_replacementPolicy_ptr) ? true : false;
 }
@@ -111,6 +114,27 @@ CacheMemory::init()
     // Way-partitioning audit stat: one bucket per way. Sized here because
     // m_cache_assoc is only meaningful after construction.
     cacheMemoryStats.m_allocsByWay.init(m_cache_assoc);
+
+    // A config-time way mask, if one was given. Applied to CLOS 0, which every
+    // requestor resolves to unless setRequestorClos says otherwise.
+    if (m_way_mask != 0) {
+        // Way partitioning hands the replacement policy a SUBSET of the ways as
+        // victim candidates. Policies that walk the candidate list linearly (LRU,
+        // RRIP, FIFO, Random) tolerate that. TreePLRU does not: it walks a tree
+        // sized for the full associativity and then maps the leaf to a candidate
+        // index, so a partial list overruns it (IndexError at runtime). Refuse at
+        // configuration time rather than crash mid-simulation.
+        fatal_if(dynamic_cast<replacement_policy::TreePLRU*>(
+                     m_replacementPolicy_ptr) != nullptr,
+                 "CacheMemory %s: way partitioning (mask %#x) is incompatible "
+                 "with TreePLRU, which indexes a full-associativity tree and "
+                 "cannot accept a candidate subset. Use LRURP, BRRIPRP or "
+                 "RandomRP on a partitioned cache.",
+                 name(), m_way_mask);
+        setClosWayMask(0, m_way_mask);
+        inform("CacheMemory %s: way-partitioned to mask %#x of %d ways",
+               name(), m_way_mask, m_cache_assoc);
+    }
 
     m_cache.resize(m_cache_num_sets,
                     std::vector<AbstractCacheEntry*>(m_cache_assoc, nullptr));
