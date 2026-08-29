@@ -3,7 +3,7 @@ CFLAGS  = -O1 -static -march=x86-64
 # BW-max aggressors (the default aggressor/aggressor_finite) need -O3
 # -ftree-vectorize (SSE2 paddq); the *_lowBW variants stay scalar at -O1.
 BWCFLAGS = -O3 -static -march=x86-64 -ftree-vectorize
-TARGETS = victim dummy aggressor aggressor_finite aggressor_lowBW aggressor_finite_lowBW dutyfree_gem5_FS
+TARGETS = victim dummy fused aggressor aggressor_finite aggressor_lowBW aggressor_finite_lowBW dutyfree_gem5_FS
 
 all: $(TARGETS)
 
@@ -12,6 +12,10 @@ victim: victim.c
 
 dummy: dummy.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+# fused = stream + hot table; the workload a pure stream cannot stand in for
+fused: fused.c
+	$(CC) $(BWCFLAGS) -o $@ $<
 
 aggressor: aggressor.c
 	$(CC) $(BWCFLAGS) -o $@ $<
