@@ -57,9 +57,19 @@ int main(int argc, char *argv[])
 
     long N = (long)(size_mb  * 1024.0 * 1024.0) / (long)sizeof(long);
     long T = (long)(table_mb * 1024.0 * 1024.0) / (long)sizeof(long);
-    /* power-of-two element count so the probe index is a mask, not a modulo */
+    /* Power-of-two element count so the probe index is a mask, not a modulo.
+     * THIS ROUNDS DOWN: a requested 3 MB realizes 2 MB and a requested 6 MB
+     * realizes 4 MB. Report the realized size, never the requested one -- the
+     * F9 failure this project has now committed four times. The realized size
+     * is printed below so it lands in the run's own log and cannot be inferred
+     * from the command line. */
     long Tp = 1; while (Tp * 2 <= T) Tp *= 2;
     long limit = N - (N % UNROLL);
+
+    fprintf(stderr, "fused: stream %.2f MB, table requested %.2f MB, "
+            "REALIZED %.2f MB (%ld elements)\n",
+            size_mb, table_mb, Tp * (double)sizeof(long) / 1048576.0, Tp);
+    fflush(stderr);
 
     for (long i = 0; i < N;  i++) arr[i] = i;        /* first-touch + non-zero */
     for (long i = 0; i < Tp; i++) tbl[i] = i * 3;    /* the tenant's own state */
