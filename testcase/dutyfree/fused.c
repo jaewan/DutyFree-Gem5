@@ -57,13 +57,18 @@ int main(int argc, char *argv[])
 
     long N = (long)(size_mb  * 1024.0 * 1024.0) / (long)sizeof(long);
     long T = (long)(table_mb * 1024.0 * 1024.0) / (long)sizeof(long);
-    /* Power-of-two element count so the probe index is a mask, not a modulo.
-     * THIS ROUNDS DOWN: a requested 3 MB realizes 2 MB and a requested 6 MB
-     * realizes 4 MB. Report the realized size, never the requested one -- the
-     * F9 failure this project has now committed four times. The realized size
-     * is printed below so it lands in the run's own log and cannot be inferred
-     * from the command line. */
-    long Tp = 1; while (Tp * 2 <= T) Tp *= 2;
+    /* Arbitrary table size, no rounding. The earlier version forced a
+     * power-of-two element count so the probe index could be a mask; that
+     * rounded DOWN silently (a requested 3 MB realized 2 MB) and collapsed a
+     * table-size sweep -- F9, the fourth instance in this project. The index is
+     * now a multiply-shift reduction of a 32-bit hash into [0, Tp):
+     *
+     *     idx = (h32 * Tp) >> 32
+     *
+     * which is uniform for ANY Tp, costs one multiply and one shift instead of
+     * one AND, and needs no division. Tp is the requested element count exactly,
+     * so realized == requested and the sweep can take intermediate points. */
+    long Tp = T;
     long limit = N - (N % UNROLL);
 
     fprintf(stderr, "fused: stream %.2f MB, table requested %.2f MB, "
@@ -91,8 +96,9 @@ int main(int argc, char *argv[])
              * table's residency matter, not so much that the tenant stops
              * being a streamer. Multiply-scramble so the index is spread over
              * the whole table rather than walking it linearly. */
-            unsigned long idx = ((unsigned long)arr[i] * 2654435761UL)
-                                & (unsigned long)(Tp - 1);
+            unsigned long h32 = (((unsigned long)arr[i] * 2654435761UL)
+                                 >> 16) & 0xFFFFFFFFUL;
+            unsigned long idx = (h32 * (unsigned long)Tp) >> 32;
             h += (unsigned long)tbl[idx];
         }
         for (long i = limit; i < N; i++) a[0] += (unsigned long)arr[i];
