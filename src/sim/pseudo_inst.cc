@@ -636,6 +636,8 @@ setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
     Addr end = pt->pageAlign(addr + size - 1) + page_size;
 
     int total_pages = 0, marked_pages = 0;
+    uint8_t line[64];
+    PortProxy &phys_proxy = tc->getSystemPtr()->physProxy;
     for (; va < end; va += page_size) {
         total_pages++;
         auto *entry =
@@ -645,6 +647,21 @@ setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
             entry = const_cast<EmulationPageTable::Entry*>(pt->lookup(va));
         }
         if (entry) {
+            // Epoch-entry drain, before the page turns Streaming: push any
+            // dirty copy out to memory, so the data stays durable once
+            // streaming lines may be dropped without a writeback. Writeback
+            // only - clean copies stay cached, as with the kernel's WBNOINVD
+            // IPI, and the epoch is read-only so they cannot go stale. The
+            // read returns the most-current copy, the write lands it in
+            // memory. Functional, so it costs no simulated time: the
+            // transition cost is measured on real hardware, not modeled here.
+            // Unlike WBNOINVD this leaves the coherence state alone, so a line
+            // stays marked dirty even once memory holds the same bytes, and
+            // the LLC can still pass that dirty copy to a reader.
+            for (Addr off = 0; off < page_size; off += sizeof(line)) {
+                phys_proxy.readBlob(entry->paddr + off, line, sizeof(line));
+                phys_proxy.writeBlob(entry->paddr + off, line, sizeof(line));
+            }
             entry->flags |= EmulationPageTable::Streaming;
             marked_pages++;
         }
