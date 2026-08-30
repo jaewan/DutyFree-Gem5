@@ -127,5 +127,5 @@ SA="$ROOT/testcase/dutyfree/aggressor"
 # was truncated spends hours producing a comparison that cannot be made.
 run_arm alone          "$V;$D;$D;$D"    "$WSS_KIB $ITERS;;;"          || { echo "TRIO ABORTED at 'alone'" >&2; exit 3; }
 run_arm with_agg       "$V;$A;$A;$A"    "$WSS_KIB $ITERS;$AGG_MB;$AGG_MB;$AGG_MB"  || { echo "TRIO ABORTED at 'with_agg'" >&2; exit 3; }
-run_arm with_streaming "$V;$SA;$SA;$SA" "$WSS_KIB $ITERS;$AGG_MB;$AGG_MB;$AGG_MB"  || { echo "TRIO ABORTED at 'with_streaming'" >&2; exit 3; }
+run_arm with_streaming "$V;$SA;$SA;$SA" "$WSS_KIB $ITERS;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream"  || { echo "TRIO ABORTED at 'with_streaming'" >&2; exit 3; }
 echo "TRIO COMPLETE: $OUT"

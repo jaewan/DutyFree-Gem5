@@ -124,7 +124,7 @@ run_all() {
         echo "  started: with_agg_${tag} [PID $!]"
 
         env RUBY_RANDOMIZATION=1 $GEM5 --outdir=$OUT/with_streaming_${tag} \
-            $COMMON -c "$V;$SA;$SA;$SA;$SA;$SA;$SA;$SA" --options "$vs $ITERS;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB;$AGG_MB" \
+            $COMMON -c "$V;$SA;$SA;$SA;$SA;$SA;$SA;$SA" --options "$vs $ITERS;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream" \
             > $OUT/with_streaming_${tag}.log 2>&1 &
         echo "  started: with_streaming_${tag} [PID $!]"
     done
