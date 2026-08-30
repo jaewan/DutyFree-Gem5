@@ -58,16 +58,16 @@ int main(int argc, char *argv[])
          * so with a page-multiple size this trims nothing. */
         long pg = sysconf(_SC_PAGESIZE);
         uintptr_t lo = ((uintptr_t)arr + pg - 1) & ~(uintptr_t)(pg - 1);
-        uintptr_t hi = ((uintptr_t)arr + (uintptr_t)N * sizeof(long))
-                       & ~(uintptr_t)(pg - 1);
+        uintptr_t hi = ((uintptr_t)arr + (uintptr_t)N * sizeof(long)) &
+                       ~(uintptr_t)(pg - 1);
         if (hi <= lo) {
             fprintf(stderr, "FATAL: stream range too small to tag\n");
             return 3;
         }
-        gem5_set_streaming((void*)lo, (long)(hi - lo));
+        gem5_set_streaming((void *)lo, (long)(hi - lo));
         /* Never leave an untagged run looking like a tagged one. */
-        printf("aggressor: streaming_tagged [%p,%p) %.1f MiB\n",
-               (void *)lo, (void *)hi, (double)(hi - lo) / (1024.0 * 1024.0));
+        printf("aggressor: streaming_tagged [%p,%p) %.1f MiB\n", (void *)lo,
+               (void *)hi, (double)(hi - lo) / (1024.0 * 1024.0));
         fflush(stdout);
     }
 

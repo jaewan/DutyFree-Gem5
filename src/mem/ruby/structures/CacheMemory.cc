@@ -371,7 +371,7 @@ Addr
 CacheMemory::cacheProbeIdle(Addr address) const
 {
     assert(address == makeLineAddress(address));
-    assert(!cacheAvail(address));  // so every way is occupied
+    assert(!cacheAvail(address)); // so every way is occupied
 
     // The policy has to see the whole set: TreePLRU (RubyCache's default)
     // walks its tree by way position, so handing it a filtered candidate list
@@ -389,7 +389,7 @@ CacheMemory::cacheProbeIdle(Addr address) const
     // way that has none; this is rare enough that departing from the policy's
     // order is not worth more machinery.
     for (int i = 0; i < m_cache_assoc; i++) {
-        AbstractCacheEntry* entry = m_cache[cacheSet][i];
+        AbstractCacheEntry *entry = m_cache[cacheSet][i];
         if (entry->m_Permission != AccessPermission_Busy) {
             return entry->m_Address;
         }
