@@ -318,6 +318,11 @@ action(Initiate_Request_Stale, desc="") {
 
 action(Initiate_Snoop, desc="") {
   State initial := getState(tbe, cache_entry, address);
+  // Unreachable if H3 kept its promise: an unenrolled block cannot be the
+  // target of a snoop. Reaching here means some level did enroll it after all.
+  if (is_valid(cache_entry) && (cache_entry.isTracked == false)) {
+    error("H3: snoop reached an unenrolled block -- some level is tracking it");
+  }
   peek(snpRdyPort, CHIRequestMsg) {
     set_tbe(allocateSnoopTBE(address, in_msg));
   }
@@ -407,6 +412,7 @@ action(Initiate_Replacement, desc="") {
   // Propagate STREAMING flag so WriteEvictFull carries it to HNF
   if (is_valid(cache_entry)) {
     tbe.isStreaming := cache_entry.isStreaming;
+    tbe.isTracked := cache_entry.isTracked;
   }
 
   // UD_RU line needs to be written back because the upstream may be in UC state.
@@ -848,6 +854,11 @@ action(Initiate_LoadMiss, desc="") {
 
 
 action(Initiate_StoreHit, desc="") {
+  // The streaming epoch is read-only. A store means the contract was broken;
+  // silently letting it dirty an unenrolled block would lose the data at evict.
+  if (is_valid(cache_entry) && (cache_entry.isTracked == false)) {
+    error("H3: store to an unenrolled block -- the read-only epoch was violated");
+  }
   tbe.actions.push(Event:DataArrayRead);
   tbe.actions.push(Event:StoreHit);
   tbe.actions.push(Event:CheckCacheFill);
@@ -1500,6 +1511,12 @@ action(Initiate_SnpOnce, desc="") {
 
 action(Initiate_Replacement_Evict_BackInvalidte, desc="") {
   assert(is_HN == false);
+  // Only reachable from a state that records an upstream sharer, so an
+  // unenrolled block must never arrive here; if one does, some level enrolled
+  // it and the silent drop below it would have left a dangling reference.
+  if (tbe.isTracked == false) {
+    error("H3: back-invalidating eviction of an unenrolled block");
+  }
   tbe.actions.push(Event:SendSnpCleanInvalid);
   tbe.actions.push(Event:SendEvict);
   tbe.dataToBeInvalid := true;
@@ -1509,7 +1526,12 @@ action(Initiate_Replacement_Evict_BackInvalidte, desc="") {
 action(Initiate_Replacement_Evict, desc="") {
   assert(is_HN == false);
   assert(tbe.dir_sharers.isEmpty());
-  tbe.actions.push(Event:SendEvict);
+  // H3: if this fill was never enrolled, there is nobody to notify. An Evict
+  // would reach the HNF for a line it holds no entry for, which is what the
+  // stale check flags. Drop it silently, as Initiate_Replacement_JustDrop does.
+  if (tbe.isTracked) {
+    tbe.actions.push(Event:SendEvict);
+  }
   tbe.dataToBeInvalid := true;
   tbe.actions.pushNB(Event:TagArrayWrite);
 }
@@ -1521,6 +1543,10 @@ action(Initiate_Replacement_JustDrop, desc="") {
 
 action(Initiate_Replacement_WB_BackInvalidate, desc="") {
   assert(tbe.dataDirty || tbe.dataUnique || tbe.dataMaybeDirtyUpstream);
+  // Same reasoning as Initiate_Replacement_Evict_BackInvalidte.
+  if (tbe.isTracked == false) {
+    error("H3: back-invalidating eviction of an unenrolled block");
+  }
   tbe.actions.push(Event:SendSnpCleanInvalid);
   tbe.actions.push(Event:WriteFEPipe);
   if (is_HN) {
@@ -1556,22 +1582,45 @@ action(Initiate_SF_Eviction, desc="HN back-invalidate all sharers of a directory
 }
 
 action(Initiate_Replacement_WB, desc="") {
-  tbe.actions.push(Event:WriteFEPipe);
-  if (is_HN) {
-    assert(tbe.dataDirty);
-    tbe.actions.push(Event:SendWriteNoSnp);
-  } else if (tbe.dir_sharers.isEmpty()) {
-    assert(tbe.dataDirty || tbe.dataUnique);
-    tbe.actions.push(Event:SendWriteBackOrWriteEvict);
+  // Same silent drop as Initiate_Replacement_Evict, but only at a private
+  // cache: the is_HN arm below is the HNF writing dirty data to memory, which
+  // is data preservation, not a coherence notification, and must still run.
+  // HNF_FWD_UNIQUE grants UC to a lone reader, so a clean streaming line
+  // arrives here rather than in the Evict path.
+  if ((tbe.isTracked == false) && (is_HN == false)) {
+    // Dropped even when dirty, so the check below cannot stand yet:
+    //   assert(tbe.dataDirty == false);
+    // Dirty here is inherited, not written. Sealing writes the region back but
+    // leaves the LLC block marked UD, so the HNF hands that block to a reader
+    // with CompData_SD_PD and a read-only epoch still produces dirty copies.
+    // Those copies hold exactly the bytes memory holds -- sealing put them
+    // there and Initiate_StoreHit rejects any store afterwards -- so the dirty
+    // bit records write-back ownership, not divergence, and dropping it loses
+    // nothing. The catch is that a private cache cannot see any of that
+    // locally, which is why the assert has to go rather than be satisfied.
+    // Restore it once the write-once phase is mapped write-through (no dirty
+    // block is ever created, so none can be inherited) or once sealing clears
+    // the state as WBNOINVD does.
+    tbe.dataToBeInvalid := true;
+    tbe.actions.pushNB(Event:TagArrayWrite);
   } else {
-    assert(tbe.dataDirty);
-    tbe.actions.push(Event:SendWriteClean);
+    tbe.actions.push(Event:WriteFEPipe);
+    if (is_HN) {
+      assert(tbe.dataDirty);
+      tbe.actions.push(Event:SendWriteNoSnp);
+    } else if (tbe.dir_sharers.isEmpty()) {
+      assert(tbe.dataDirty || tbe.dataUnique);
+      tbe.actions.push(Event:SendWriteBackOrWriteEvict);
+    } else {
+      assert(tbe.dataDirty);
+      tbe.actions.push(Event:SendWriteClean);
+    }
+    tbe.actions.pushNB(Event:DataArrayRead);
+    tbe.actions.push(Event:WriteBEPipe);
+    tbe.actions.push(Event:SendWBData);
+    tbe.dataToBeInvalid := true;
+    tbe.actions.pushNB(Event:TagArrayWrite);
   }
-  tbe.actions.pushNB(Event:DataArrayRead);
-  tbe.actions.push(Event:WriteBEPipe);
-  tbe.actions.push(Event:SendWBData);
-  tbe.dataToBeInvalid := true;
-  tbe.actions.pushNB(Event:TagArrayWrite);
 }
 
 
@@ -3484,7 +3533,10 @@ action(Allocate_DirEntry, desc="") {
   // CompAck sharer-record so the transaction finalizes to I (no dir entry ever
   // expected at Finalize). Gated by enable_H3_streaming_bypass (default off).
   // (SLICC actions have no `return`, so this is an if/else-if/else chain.)
-  if (enable_H3_streaming_bypass && is_HN && tbe.isStreaming) {
+  // H3: no coherence tracking for this block at ANY level -- the HNF does not
+  // enroll it in the SF, and an L2 does not record its L1 as a sharer. With
+  // nobody tracking a copy, no snoop can ever be aimed at one.
+  if (enable_H3_streaming_bypass && tbe.isStreaming) {
     tbe.updateDirOnCompAck := false;
   } else if (sf_finite) {
     // Finite SF (HNF only): defer to CheckSFFill, which allocates now if there
@@ -3520,6 +3572,10 @@ action(CheckCacheFill, desc="") {
   } else if (need_fill && cache.cacheAvail(address)) {
     // don't have a cache block, but there is space to allocate one
     set_cache_entry(cache.allocate(address, new CacheEntry));
+    // The only place a cache entry is created, and so the only place tracking
+    // can be decided: this fill either enrolled upstream or it did not, and
+    // Allocate_DirEntry made that call from the same tbe.isStreaming.
+    cache_entry.isTracked := (enable_H3_streaming_bypass && tbe.isStreaming) == false;
     tbe.actions.pushFront(Event:DataArrayWriteOnFill);
     tbe.actions.pushFront(Event:FillPipe);
 
