@@ -3584,7 +3584,12 @@ action(CheckSFFill, desc="Ensure a finite-SF dir slot is free; evict an SF victi
   } else {
     // no room in this set: pick a victim, evict it, and re-run after it drains
     execute_next := false;
-    Addr victim_addr := sf.cacheProbe(address);
+    // Prefer a victim with no transaction in flight. Parking on a busy victim
+    // is what lets a CheckSFFill wait and a CheckCacheFill wait close a cycle
+    // (each waits for the other to finalize); every such cycle contains at
+    // least one SF-side wait, so avoiding busy SF victims breaks all of them.
+    // The is_invalid(victim_tbe) test below stays authoritative.
+    Addr victim_addr := sf.cacheProbeIdle(address);
     DirEntry victim_dir := getDirEntry(victim_addr);
     TBE victim_tbe := getCurrentActiveTBE(victim_addr);
     assert(is_valid(victim_dir));

@@ -159,6 +159,11 @@ class CacheMemory : public SimObject
     int getNumBlocks() const { return m_cache_num_sets * m_cache_assoc; }
     Addr getAddressAtIdx(int idx) const;
 
+    // Like cacheProbe, but skips ways whose entry is marked Busy (a
+    // transaction in flight). Real directories exclude transient lines from
+    // replacement candidates. Falls back to cacheProbe if every way is busy.
+    Addr cacheProbeIdle(Addr address) const;
+
   private:
     // convert a Address to its location in the cache
     int64_t addressToCacheSet(Addr address) const;
