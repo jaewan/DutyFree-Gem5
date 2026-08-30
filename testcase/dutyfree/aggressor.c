@@ -1,6 +1,8 @@
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Sequential streaming aggressor — bandwidth-maximizing variant, DutyFree
  * (STREAMING / LLC+PF bypass). argv[1] = size_mb (float, default 4.0).
@@ -28,7 +30,12 @@ static inline void gem5_set_streaming(void *addr, long size) {
 
 #define MAX_MB 512
 #define UNROLL 16
-static long arr[(long)MAX_MB * 1024 * 1024 / sizeof(long)];
+/* Page-aligned so the sealed range is exactly the scanned range. Marking is
+ * page-granular: an unaligned array would leave its first and last partial
+ * pages unsealed -- those lines would run as WB inside the H2/H3 arm -- and
+ * would pull whatever shares those pages into the read-only epoch. */
+static long arr[(long)MAX_MB * 1024 * 1024 / sizeof(long)]
+    __attribute__((aligned(4096)));
 
 int main(int argc, char *argv[])
 {
@@ -43,8 +50,26 @@ int main(int argc, char *argv[])
      * Gated on argv[2]=="stream" so one binary serves both the WB and the H2
      * arm: using two different binaries would confound the comparison with a
      * code difference. Same convention as h1bw_stream.c. */
-    if (argc > 2 && strcmp(argv[2], "stream") == 0)
-        gem5_set_streaming((void*)arr, N * (long)sizeof(long));
+    if (argc > 2 && strcmp(argv[2], "stream") == 0) {
+        /* Same trim dirtax/aggressor.c applies before mprotect: only whole
+         * pages fully inside arr. Marking is page-granular, so a range rounded
+         * outward would seal whatever shares the first or last page, and that
+         * neighbour never opted into the read-only epoch. arr is page-aligned,
+         * so with a page-multiple size this trims nothing. */
+        long pg = sysconf(_SC_PAGESIZE);
+        uintptr_t lo = ((uintptr_t)arr + pg - 1) & ~(uintptr_t)(pg - 1);
+        uintptr_t hi = ((uintptr_t)arr + (uintptr_t)N * sizeof(long))
+                       & ~(uintptr_t)(pg - 1);
+        if (hi <= lo) {
+            fprintf(stderr, "FATAL: stream range too small to tag\n");
+            return 3;
+        }
+        gem5_set_streaming((void*)lo, (long)(hi - lo));
+        /* Never leave an untagged run looking like a tagged one. */
+        printf("aggressor: streaming_tagged [%p,%p) %.1f MiB\n",
+               (void *)lo, (void *)hi, (double)(hi - lo) / (1024.0 * 1024.0));
+        fflush(stdout);
+    }
 
     static volatile unsigned long sink;
     unsigned long a[UNROLL];
