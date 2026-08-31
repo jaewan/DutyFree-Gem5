@@ -629,14 +629,7 @@ action(Initiate_ReadOnce_HitUpstream, desc="") {
     tbe.dataToBeInvalid := true;
   } else if (tbe.dataValid == false) {
     // possible on UD_RU,UC_RU where cache_entry valid but tbe.dataValid == false
-    // this prevents going to RU if no data is received from snoop.
-    // Take the block along with the flag: a DCT-forwarded ReadOnce reaches
-    // Finalize_UpdateCacheFromTBE without ever receiving data, and there
-    // dataValid=true with an empty dataBlkValid fails the fill assertion. The
-    // block is already in this cache, so copying it keeps the two consistent
-    // and leaves the line where it was. Same pattern as Initiate_Request_Stale.
-    tbe.dataBlk := cache_entry.DataBlk;
-    tbe.dataBlkValid.fillMask();
+    // this prevents going to RU if no data is received from snoop
     tbe.dataValid := true;
   }
 }
