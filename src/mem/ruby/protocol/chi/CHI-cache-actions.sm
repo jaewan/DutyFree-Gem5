@@ -3482,12 +3482,23 @@ action(Finalize_UpdateCacheFromTBE, desc="") {
       (final == State:SD)     || (final == State:UC)     || (final == State:SC) ||
       (final == State:UC_RU)  || (final == State:UD_RU)  || (final == State:UD_RSD) ||
       (final == State:SD_RSD)) {
-    assert(tbe.dataBlkValid.isFull());
     assert(tbe.dataValid);
     assert(is_valid(cache_entry));
-    cache_entry.DataBlk := tbe.dataBlk;
-    cache_entry.isStreaming := tbe.isStreaming;
-    DPRINTF(RubySlicc, "Cached data %s pfb %s streaming %s\n", tbe.dataBlk, cache_entry.HWPrefetched, tbe.isStreaming);
+    if (tbe.dataBlkValid.isFull()) {
+      cache_entry.DataBlk := tbe.dataBlk;
+      cache_entry.isStreaming := tbe.isStreaming;
+      DPRINTF(RubySlicc, "Cached data %s pfb %s streaming %s\n", tbe.dataBlk, cache_entry.HWPrefetched, tbe.isStreaming);
+    } else {
+      // A ReadOnce served from upstream in UD_RU/UC_RU never receives data.
+      // copyCacheAndDir deliberately leaves dataValid/dataBlkValid clear in
+      // those states because the Unique upstream copy may be newer, and
+      // Initiate_ReadOnce_HitUpstream then raises dataValid only to keep the
+      // final state from dropping to RU. So there is nothing to write: leave
+      // the block exactly as it was, which is what that action already asks
+      // for ("no need to update or access tags/data").
+      assert(tbe.dataBlkValid.isEmpty());
+      assert(tbe.dataMaybeDirtyUpstream);
+    }
   } else {
     // make sure only deallocate the cache entry if data is invalid
     assert(tbe.dataValid == false);
