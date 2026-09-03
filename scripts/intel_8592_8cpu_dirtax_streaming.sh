@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Intel Xeon 8592+ (Emerald Rapids) — 8 CPU: DirTax + STREAMING (combined, agg2x)
 # LLC = 8 HNF × 5MiB = 40MiB ; aggressor = 2 × LLC(total) = 80MB each
-# victim → DRAM 150ns, aggressor → CXL 300ns
+# victim → DRAM 100ns, aggressor → CXL 200ns
 #
 # WSS sweep × three run types, all jobs launched at once:
 #   alone            victim + dummy×7
@@ -30,7 +30,7 @@ COMMON="$CFG
     --l3_size=5MiB   --l3_assoc=20
     --mem-type=SimpleMemory
     --mem-size=512GiB --cxl-mem-size=256GiB
-    --dram-latency=150ns --cxl-latency=300ns"
+    --dram-latency=100ns --cxl-latency=200ns"
 
 V=$ROOT/testcase/dirtax/victim
 A=$ROOT/testcase/dirtax/aggressor       # WB (dirtax)

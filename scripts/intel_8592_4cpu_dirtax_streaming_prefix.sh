@@ -23,7 +23,7 @@ COMMON=("$CFG" --abs-max-tick="$TICKS" --ruby --topology=Pt2Pt
   "--chi-config=$ROOT/configs/ruby/CHI_config_8592.py" --num-l3caches=4 --num-dirs=1
   --cpu-type=O3CPU --num-cpus=4 --cpu-clock=1.9GHz --l1d_size=48KiB --l1d_assoc=12
   --l1i_size=32KiB --l1i_assoc=8 --l2_size=2MiB --l2_assoc=16 --l3_size=5MiB --l3_assoc=20
-  --mem-type=SimpleMemory --mem-size=8GiB --cxl-mem-size=4GiB --dram-latency=150ns --cxl-latency=300ns)
+  --mem-type=SimpleMemory --mem-size=8GiB --cxl-mem-size=4GiB --dram-latency=100ns --cxl-latency=200ns)
 
 run_arm() {
   local arm=$1 binaries=$2 options=$3

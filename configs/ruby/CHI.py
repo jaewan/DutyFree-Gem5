@@ -63,14 +63,14 @@ def define_options(parser):
     parser.add_argument(
         "--dram-latency",
         type=str,
-        default="150ns",
+        default="100ns",
         dest="dram_latency",
         help="SimpleMemory latency for the DRAM range (pool 0)",
     )
     parser.add_argument(
         "--cxl-latency",
         type=str,
-        default="300ns",
+        default="200ns",
         dest="cxl_latency",
         help="SimpleMemory latency for the CXL range (pool 1)",
     )
