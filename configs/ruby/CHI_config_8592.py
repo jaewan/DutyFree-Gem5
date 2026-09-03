@@ -797,10 +797,36 @@ class CHI_HNF(CHI_Node):
             ll_cache.replacement_policy = SHiPMemRP()
         elif _rp == "brrip":
             ll_cache.replacement_policy = BRRIPRP()
+        elif _rp == "srrip":
+            ll_cache.replacement_policy = RRIPRP()
+        elif _rp == "drrip":
+            _leaders = int(os.environ.get("HNF_RP_LEADERS", 32))
+            _sets = int(ll_cache.size.value) // (
+                int(ruby_system.block_size_bytes) * ll_cache.assoc.value
+            )
+            if _sets < 2 * _leaders:
+                m5.fatal(
+                    "LLC has %d sets; DRRIP with %d leader sets per team "
+                    "leaves no followers. Lower HNF_RP_LEADERS.",
+                    _sets,
+                    _leaders,
+                )
+            ll_cache.replacement_policy = DRRIPRP(
+                constituency_size=(_sets // _leaders) * ll_cache.assoc.value,
+                team_size=ll_cache.assoc.value,
+                replacement_policy_a=BRRIPRP(),
+                replacement_policy_b=RRIPRP(),
+            )
         elif _rp == "lru":
             ll_cache.replacement_policy = LRURP()
+        elif _rp == "nru":
+            # NRURP is BRRIP with num_bits=1, btp=100 -- RRIP's one-bit form.
+            ll_cache.replacement_policy = NRURP()
         elif _rp not in ("", "default", "treeplru", "tree_plru"):
-            m5.fatal("unknown HNF_RP=%s (ship|brrip|lru|treeplru)", _rp)
+            m5.fatal(
+                "unknown HNF_RP=%s (ship|srrip|brrip|drrip|lru|nru|treeplru)",
+                _rp,
+            )
 
         self._cntrl = CHI_HNFController(
             ruby_system, ll_cache, NULL, addr_ranges
