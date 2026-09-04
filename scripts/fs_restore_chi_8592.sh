@@ -43,21 +43,68 @@ case "$1" in
 esac
 
 # Fixed layout, must equal boot (fs_boot_checkpoint.sh): DRAM 128 + CXL 128GiB.
-MEMARGS="--mem-size=${MEM:-256GiB} --cxl-mem-size=${CXL:-128GiB}"
+MEMARGS=("--mem-size=${MEM:-256GiB}" "--cxl-mem-size=${CXL:-128GiB}")
 
-mkdir -p $OUT
-exec env RUBY_RANDOMIZATION=1 $GEM5 --outdir=$OUT $FS \
-    --kernel=$KERNEL \
-    --disk-image=$DISK \
+# A checkpoint is meaningful only together with the exact kernel, base image,
+# and simulator that created it.  Refuse a silent provenance mismatch before
+# spending hours in detailed simulation.
+PROVENANCE=$CKPT/checkpoint.provenance
+if [ -s "$PROVENANCE" ]; then
+	grep -qx 'boot_checkpoint_complete=true' "$PROVENANCE" || {
+		echo "FAIL checkpoint provenance is incomplete: $PROVENANCE" >&2
+		exit 2
+	}
+	mapfile -t cpts < <(find "$CKPT" -mindepth 2 -maxdepth 2 -type f -name m5.cpt -size +0c -printf '%h\n')
+	[ ${#cpts[@]} -eq 1 ] || {
+		echo "FAIL expected exactly one complete checkpoint" >&2
+		exit 2
+	}
+	while IFS= read -r -d '' artifact; do
+		key=$(basename "$artifact" | tr '.-' '__')
+		expected=$(sed -n "s/^checkpoint_${key}_sha256=//p" "$PROVENANCE")
+		[ -n "$expected" ] || {
+			echo "FAIL missing payload hash for $artifact" >&2
+			exit 2
+		}
+		actual=$(sha256sum "$artifact" | awk '{print $1}')
+		[ "$actual" = "$expected" ] || {
+			echo "FAIL checkpoint payload hash mismatch: $artifact" >&2
+			exit 2
+		}
+	done < <(find "${cpts[0]}" -maxdepth 1 -type f -print0 | sort -z)
+    verify_hash()
+    {
+        key=$1
+        path=$2
+        expected=$(sed -n "s/^${key}=//p" "$PROVENANCE")
+        [ -n "$expected" ] || return 0
+        actual=$(sha256sum "$path" | awk '{print $1}')
+        [ "$actual" = "$expected" ] || {
+            echo "FAIL provenance mismatch: $key ($path)" >&2
+            exit 2
+        }
+    }
+    verify_hash kernel_sha256 "$KERNEL"
+    verify_hash image_sha256 "$DISK"
+    verify_hash gem5_sha256 "$GEM5"
+else
+    echo "WARN checkpoint has no provenance manifest: $PROVENANCE" >&2
+fi
+
+mkdir -p "$OUT"
+exec env RUBY_RANDOMIZATION=1 "$GEM5" --outdir="$OUT" "$FS" \
+    --kernel="$KERNEL" \
+    --disk-image="$DISK" \
     --command-line="$CMDLINE" \
-    --script=$RCS \
-    --checkpoint-dir=$CKPT -r 1 \
+    --script="$RCS" \
+    --checkpoint-dir="$CKPT" -r 1 \
     --ruby --topology=Pt2Pt \
-    --chi-config=$ROOT/configs/ruby/CHI_config_8592.py \
+    --chi-config="$ROOT/configs/ruby/CHI_config_8592.py" \
     --num-l3caches=$N --num-dirs=1 \
     --cpu-type=O3CPU --restore-with-cpu=O3CPU --num-cpus=$N --cpu-clock=1.9GHz \
     --l1d_size=48KiB --l1d_assoc=12 \
     --l1i_size=32KiB --l1i_assoc=8 \
     --l2_size=2MiB   --l2_assoc=16 \
     --l3_size=5MiB   --l3_assoc=20 \
-    --mem-type=SimpleMemory $MEMARGS --dram-latency=$DRAM_LAT --cxl-latency=$CXL_LAT
+    --mem-type=SimpleMemory "${MEMARGS[@]}" \
+    --dram-latency="$DRAM_LAT" --cxl-latency="$CXL_LAT"
