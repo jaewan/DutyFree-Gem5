@@ -637,14 +637,23 @@ action(Initiate_ReadOnce_HitUpstream, desc="") {
     tbe.actions.pushNB(Event:SendCompData);
   }
   tbe.updateDirOnCompAck := false;
-  // no need to update or access tags/data on ReadOnce served from upstream
+  // The request data is served from upstream, so there is no cache pipeline
+  // access.  A retained local copy still has to be represented in the TBE.
 
   if (is_invalid(cache_entry)) {
     // if we receive data, invalidate at the end so it can be dropped
     tbe.dataToBeInvalid := true;
   } else if (tbe.dataValid == false) {
     // possible on UD_RU,UC_RU where cache_entry valid but tbe.dataValid == false
-    // this prevents going to RU if no data is received from snoop
+    // This prevents going to RU if DCT forwards the owner's data directly to
+    // the ReadOnce requester and we receive no snoop data response.  Rebuild
+    // the TBE's retained local copy as well as its abstract valid bit: Final
+    // writes cached states from the TBE and requires valid data to carry a
+    // full byte mask.  The local copy may be stale relative to the upstream
+    // owner, which is expected and remains encoded by the combined *_RU state.
+    assert(tbe.dataBlkValid.isEmpty());
+    tbe.dataBlk := cache_entry.DataBlk;
+    tbe.dataBlkValid.fillMask();
     tbe.dataValid := true;
   }
 }
