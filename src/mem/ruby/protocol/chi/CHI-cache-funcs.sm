@@ -741,6 +741,10 @@ void prepareRequestRetry(TBE tbe, CHIRequestMsg & out_msg) {
   out_msg.seqReq := tbe.seqReq;
   out_msg.is_local_pf := false;
   out_msg.is_remote_pf := tbe.is_local_pf || tbe.is_remote_pf;
+  // Must be copied here as well as in prepareRequest: the field defaults to
+  // false, so a retried request that omits it is affirmatively marked
+  // non-streaming and the HNF allocates a line H2 would have declined.
+  out_msg.isStreaming := tbe.isStreaming;
   out_msg.atomic_op.clear();
   out_msg.atomic_op.orMask(tbe.atomic_op);
 }
