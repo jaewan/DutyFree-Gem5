@@ -782,11 +782,13 @@ class CHI_HNF(CHI_Node):
 
         ll_cache = llcache_type(start_index_bit=intlvHighBit + 1)
 
-        # LLC replacement policy (env HNF_RP). Unset keeps whatever
-        # llcache_type specifies; RubyCache's default is TreePLRURP, which is
-        # what every published number in this project was produced with -- so
-        # an unset environment reproduces prior behaviour exactly, and any
-        # comparison must name TreePLRU rather than assume LRU.
+        # LLC replacement policy (env HNF_RP). Unset means LRU, which is what the
+        # CAT-style way partitioning is built on: a masked candidate set is a
+        # subset of the ways, and TreePLRU walks its bit tree by way position, so
+        # it names a way the caller never offered. Leaving RubyCache's own
+        # TreePLRURP default in place is how SE full, FS full and the first
+        # 16-core sweep silently ran TreePLRU while only the RP sweep named its
+        # policy. Pass HNF_RP=treeplru for the old default.
         #
         # #28 needs a reuse predictor at the LLC to compare declaration
         # against prediction. SHiP is the only one in this tree (Hawkeye and
@@ -817,12 +819,14 @@ class CHI_HNF(CHI_Node):
                 replacement_policy_a=BRRIPRP(),
                 replacement_policy_b=RRIPRP(),
             )
-        elif _rp == "lru":
-            ll_cache.replacement_policy = LRURP()
         elif _rp == "nru":
             # NRURP is BRRIP with num_bits=1, btp=100 -- RRIP's one-bit form.
             ll_cache.replacement_policy = NRURP()
-        elif _rp not in ("", "default", "treeplru", "tree_plru"):
+        elif _rp in ("", "default", "lru"):
+            ll_cache.replacement_policy = LRURP()
+        elif _rp in ("treeplru", "tree_plru"):
+            pass  # leave llcache_type's own default
+        else:
             m5.fatal(
                 "unknown HNF_RP=%s (ship|srrip|brrip|drrip|lru|nru|treeplru)",
                 _rp,
