@@ -59,6 +59,7 @@ testcase/dutyfree/streaming_pf_probe
 testcase/dutyfree/dummy
 testcase/dutyfree/dutyfree_gem5_FS
 testcase/dutyfree/h1bw_stream
+testcase/dutyfree/npot_probe
 results/
 .DS_Store
 

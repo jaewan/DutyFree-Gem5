@@ -113,6 +113,37 @@ CacheMemory::init()
     m_cache_num_set_bits = floorLog2(m_cache_num_sets);
     assert(m_cache_num_set_bits > 0);
 
+    // addressToCacheSet() selects exactly m_cache_num_set_bits index bits, so
+    // only 2^floorLog2(m_cache_num_sets) sets are ever addressed.  When the set
+    // count is not a power of two the surplus sets are still allocated below
+    // and then never indexed, and the cache simulates less capacity than it was
+    // configured with, with nothing in the output saying so.  7680 KiB at 20
+    // ways and 64 B lines is 6144 sets, of which 4096 are reachable: 5.00 MiB
+    // realized against 7.50 MiB requested.
+    //
+    // Warning rather than fatal, deliberately.  A fatal would refuse
+    // configurations that already exist in-tree and whose results are on
+    // record, which would make the affected campaigns un-re-runnable at the
+    // very moment their realized geometry needs confirming; and warning-only is
+    // what makes this provably inert for a power-of-two set count, since the
+    // branch is not taken at all.  The cost of that choice is that the operator
+    // must read the warning, so it states the realized capacity outright
+    // instead of leaving the arithmetic to the reader -- a run's console log is
+    // then the artifact that records reachable capacity, which is a quantity no
+    // gem5 output carried before.
+    int64_t reachable_sets = int64_t{1} << m_cache_num_set_bits;
+    if (reachable_sets != m_cache_num_sets) {
+        int64_t realized = reachable_sets * m_cache_assoc * m_block_size;
+        warn("CacheMemory %s: %d sets is not a power of two, so only %d of "
+             "them are reachable and %d are allocated but never indexed. "
+             "Configured %d B (%d ways, %d B lines); REALIZED CAPACITY %d B "
+             "(%.1f%% of configured). Pick a size/assoc/block whose "
+             "(size/assoc)/block is a power of two.",
+             name(), m_cache_num_sets, reachable_sets,
+             m_cache_num_sets - reachable_sets, m_cache_size, m_cache_assoc,
+             m_block_size, realized, 100.0 * realized / m_cache_size);
+    }
+
     // Way-partitioning audit stat: one bucket per way. Sized here because
     // m_cache_assoc is only meaningful after construction.
     cacheMemoryStats.m_allocsByWay.init(m_cache_assoc);

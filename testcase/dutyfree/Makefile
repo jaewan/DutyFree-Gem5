@@ -3,7 +3,7 @@ CFLAGS  = -O1 -static -march=x86-64
 # BW-max aggressors (the default aggressor/aggressor_finite) need -O3
 # -ftree-vectorize (SSE2 paddq); the *_lowBW variants stay scalar at -O1.
 BWCFLAGS = -O3 -static -march=x86-64 -ftree-vectorize
-TARGETS = victim dummy fused aggressor aggressor_finite aggressor_lowBW aggressor_finite_lowBW dutyfree_gem5_FS
+TARGETS = victim dummy fused aggressor aggressor_finite aggressor_lowBW aggressor_finite_lowBW dutyfree_gem5_FS npot_probe
 
 all: $(TARGETS)
 
@@ -11,6 +11,11 @@ victim: victim.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 dummy: dummy.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+# Reachable-LLC-capacity probe.  Scalar at -O1 on purpose: the sweep must stay
+# one load per line so the access order the LRU sees is the address order.
+npot_probe: npot_probe.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 # fused = stream + hot table; the workload a pure stream cannot stand in for
