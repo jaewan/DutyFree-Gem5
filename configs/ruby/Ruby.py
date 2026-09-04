@@ -38,6 +38,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import math
+import os
 from importlib import import_module
 
 import m5
@@ -157,6 +158,31 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
     cxl_size_str = getattr(options, "cxl_mem_size", "0")
     cxl_enabled = cxl_size_str not in ("0", "0B", "0GiB", "0MiB")
 
+    # Optional per-range SimpleMemory bandwidth ceilings, same env-var idiom as
+    # ALL_CXL / L1_MSHR / HNF_* elsewhere in this tree.  Both default to unset,
+    # in which case nothing is assigned and the SimObject keeps its class
+    # default -- so an unset environment produces a byte-identical config.ini
+    # to runs made before this existed.  Only applied on the CXL-emulation
+    # path, alongside the per-range latency assignment below.
+    #
+    # Two traps, both of which have already produced wrong numbers here:
+    #
+    #  1. `bandwidth` in config.ini is TICKS PER BYTE, not bytes/s.  It is
+    #     MemoryBandwidth.getValue() -> ticks.fromSeconds(1/bytes_per_sec),
+    #     and fromSeconds quantises to an INTEGER tick (ROUND_HALF_UP).  Only
+    #     simFreq/k B/s for integer k is exactly realizable; everything else
+    #     silently snaps to the nearest such point.  That quantisation is why
+    #     the 512GiB/s class default (1.819 ticks/byte) is realized as
+    #     2.000000 ticks/byte, i.e. exactly 500 GB/s.  fromSeconds only warns
+    #     when it rounds *down*, so rounding up is silent.
+    #  2. m5.util.convert.toMemoryBandwidth uses BINARY prefixes, so "32GB/s"
+    #     means 32 GiB/s.  Pass a bare "<integer>B/s" to say what you mean.
+    #
+    # Read the realized value back out of config.ini and gate on it; never
+    # report the requested value as though it were realized.
+    cxl_bw_req = os.environ.get("CXL_MEM_BW", "").strip()
+    dram_bw_req = os.environ.get("DRAM_MEM_BW", "").strip()
+
     # --split-mem-ctlr: dir_cntrls[i] owns mem_ranges[i] whole (no interleave,
     # no crossbar) with its own memory device — DRAM SNF = iMC (dram-latency),
     # CXL SNF = CXL root port (cxl-latency). Models Intel SPR separate memory
@@ -182,8 +208,12 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
                     mem_ctrl.latency = getattr(
                         options, "dram_latency", "150ns"
                     )
+                    if dram_bw_req:
+                        mem_ctrl.bandwidth = dram_bw_req
                 else:
                     mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                    if cxl_bw_req:
+                        mem_ctrl.bandwidth = cxl_bw_req
             if options.access_backing_store:
                 dram_intf.kvm_map = False
             mem_ctrl.port = dir_cntrl.memory_out_port
@@ -225,10 +255,14 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             ):
                 if ri == len(system.mem_ranges) - 1:
                     mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                    if cxl_bw_req:
+                        mem_ctrl.bandwidth = cxl_bw_req
                 else:
                     mem_ctrl.latency = getattr(
                         options, "dram_latency", "150ns"
                     )
+                    if dram_bw_req:
+                        mem_ctrl.bandwidth = dram_bw_req
 
             if options.access_backing_store:
                 dram_intf.kvm_map = False
