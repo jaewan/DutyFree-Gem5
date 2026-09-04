@@ -80,7 +80,10 @@ def fromSeconds(value):
     int_value = int(
         decimal.Decimal(value).to_integral_value(decimal.ROUND_HALF_UP)
     )
-    err = (value - int_value) / value
+    # Magnitude, not signed difference: rounding up makes (value - int_value)
+    # negative, which no positive tolerance can ever exceed, so the signed
+    # form silently passed every value that rounded up.
+    err = abs(value - int_value) / value
     if err > frequency_tolerance:
         warn(
             "rounding error > tolerance\n    %f rounded to %d",
