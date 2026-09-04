@@ -37,6 +37,16 @@
  *
  * !!! BUILD WITH -O3 -march=x86-64 -ftree-vectorize !!! */
 
+/* Start the measured window AFTER this tenant's initialisation.
+ * Without this the victim's measured window includes the tenant's first-touch
+ * writes, during which STREAMING is not yet declared -- so the window is part
+ * "polluting writes, mechanism inactive" and part "streaming reads, mechanism
+ * active".  The share is arm-dependent (protected arms end sooner), which
+ * biases protection toward the way mask and tenant cost against it.  The victim
+ * already resets before its own measurement pass; this is the tenant's half. */
+static inline void gem5_reset_stats(void) {
+    __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00" : : "D"(0ULL), "S"(0ULL));
+}
 static inline void gem5_set_streaming(void *addr, long size) {
     __asm__ volatile(".byte 0x0f, 0x04, 0x55, 0x00"
                      : : "D"((long)addr), "S"(size) : "rax");
@@ -89,6 +99,24 @@ int main(int argc, char *argv[])
     unsigned long a[UNROLL];
     unsigned long h = 0;
     for (int k = 0; k < UNROLL; k++) a[k] = 0;
+
+    /* argv[4] = warmup passes to run BEFORE resetting statistics.
+     *
+     * Phase alignment.  Both tenant and victim reset; the LAST reset defines
+     * the measured window.  This tenant's initialisation is short, so without a
+     * warmup the *victim's* reset lands last and the window covers all 12e6
+     * victim accesses -- whereas the hash-join tenant's 185M-cycle setup means
+     * ITS reset lands last and the window covers ~10.8e6.  Different windows,
+     * so the two workloads were not comparable (prereg amendment A1.3).
+     *
+     * Streaming for `warm` passes before resetting pushes this tenant's reset
+     * past the victim's, so both campaigns measure "from the tenant's reset,
+     * after tenant init and after victim warmup" -- the same logical point.
+     * 0 preserves the previous behaviour exactly. */
+    long warm = (argc > 4) ? atol(argv[4]) : 0;
+    long pass = 0;
+    int armed = 0;
+    if (warm <= 0) { gem5_reset_stats(); armed = 1; }
     while (1) {
         for (long i = 0; i < limit; i += UNROLL) {
             for (int k = 0; k < UNROLL; k++) a[k] += (unsigned long)arr[i + k];
@@ -105,5 +133,12 @@ int main(int argc, char *argv[])
         unsigned long s = h;
         for (int k = 0; k < UNROLL; k++) s += a[k];
         sink = s;
+        if (!armed && ++pass >= warm) {
+            fprintf(stderr, "fused: warmup complete after %ld passes; "
+                            "resetting stats\n", pass);
+            fflush(stderr);
+            gem5_reset_stats();
+            armed = 1;
+        }
     }
 }
