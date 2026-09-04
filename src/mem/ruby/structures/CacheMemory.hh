@@ -260,6 +260,11 @@ class CacheMemory : public SimObject
 
           statistics::Scalar numDataArrayReads;
           statistics::Scalar numDataArrayWrites;
+          // HNF-only when incremented by CHI-cache: a streaming request
+          // reached an invalid HNF line and therefore skipped a would-be LLC
+          // fill. This is mechanism attribution, not a proxy based on total
+          // data-array writes (which include kernel and unrelated traffic).
+          statistics::Scalar streamingHnfFillBypasses;
           statistics::Scalar numTagArrayReads;
           statistics::Scalar numTagArrayWrites;
 
@@ -302,6 +307,7 @@ class CacheMemory : public SimObject
       void profileDemandMiss();
       void profilePrefetchHit();
       void profilePrefetchMiss();
+      void profileStreamingHnfFillBypass();
 };
 
 std::ostream& operator<<(std::ostream& out, const CacheMemory& obj);

@@ -271,6 +271,17 @@ action(Initiate_Request, desc="") {
   bool alloc_entry := needCacheEntry(tbe.reqType,
                                      cache_entry, dir_entry,
                                      tbe.is_local_pf, tbe.isStreaming);
+  // H2 observability: this is the decision boundary. Count a streaming HNF
+  // cache miss exactly when H2 vetoes the LLC allocation opportunity. It is
+  // deliberately at the HNF, not at the TLB or requester, so it cannot be
+  // inflated by tagged accesses that never reach the home node.
+  bool would_alloc_without_streaming := needCacheEntry(tbe.reqType,
+                                                       cache_entry, dir_entry,
+                                                       tbe.is_local_pf, false);
+  if (is_HN && tbe.isStreaming && is_invalid(cache_entry) &&
+      would_alloc_without_streaming) {
+    cache.profileStreamingHnfFillBypass();
+  }
   bool dealloc_entry := needDeallocCacheEntry(tbe.reqType);
   assert((alloc_entry && dealloc_entry) == false);
 

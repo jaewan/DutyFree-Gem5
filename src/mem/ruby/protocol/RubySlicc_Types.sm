@@ -244,6 +244,7 @@ structure (CacheMemory, external = "yes") {
   void profileDemandMiss();
   void profilePrefetchHit();
   void profilePrefetchMiss();
+  void profileStreamingHnfFillBypass();
 }
 
 structure (WireBuffer, inport="yes", outport="yes", external = "yes") {

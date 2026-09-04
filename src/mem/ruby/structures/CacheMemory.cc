@@ -740,6 +740,8 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
     : statistics::Group(parent),
       ADD_STAT(numDataArrayReads, "Number of data array reads"),
       ADD_STAT(numDataArrayWrites, "Number of data array writes"),
+      ADD_STAT(streamingHnfFillBypasses,
+               "Streaming HNF cache misses that bypassed an LLC fill"),
       ADD_STAT(numTagArrayReads, "Number of tag array reads"),
       ADD_STAT(numTagArrayWrites, "Number of tag array writes"),
       ADD_STAT(numTagArrayStalls, "Number of stalls caused by tag array"),
@@ -1008,6 +1010,12 @@ void
 CacheMemory::profilePrefetchMiss()
 {
     cacheMemoryStats.m_prefetch_misses++;
+}
+
+void
+CacheMemory::profileStreamingHnfFillBypass()
+{
+    cacheMemoryStats.streamingHnfFillBypasses++;
 }
 
 } // namespace ruby
