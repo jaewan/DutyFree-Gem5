@@ -753,6 +753,9 @@ void prepareRequestRetry(TBE tbe, CHIRequestMsg & out_msg) {
   out_msg.seqReq := tbe.seqReq;
   out_msg.is_local_pf := false;
   out_msg.is_remote_pf := tbe.is_local_pf || tbe.is_remote_pf;
+  // Rebuilt field by field here, and this one was missing: a retried request
+  // reached the HN as non-streaming. Harmless until H3 started reading it.
+  out_msg.isStreaming := tbe.isStreaming;
   out_msg.atomic_op.clear();
   out_msg.atomic_op.orMask(tbe.atomic_op);
 }
@@ -777,6 +780,9 @@ void prepareRequestRetryDVM(TBE tbe, CHIRequestMsg & out_msg) {
   out_msg.seqReq := tbe.seqReq;
   out_msg.is_local_pf := false;
   out_msg.is_remote_pf := tbe.is_local_pf || tbe.is_remote_pf;
+  // Rebuilt field by field here, and this one was missing: a retried request
+  // reached the HN as non-streaming. Harmless until H3 started reading it.
+  out_msg.isStreaming := tbe.isStreaming;
 }
 
 void enqueueDoRetry(TBE tbe) {

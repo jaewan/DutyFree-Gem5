@@ -300,6 +300,8 @@ action(Initiate_Request_Stale, desc="") {
   peek(reqRdyPort, CHIRequestMsg) {
     set_tbe(allocateRequestTBE(address, in_msg));
     was_retried := in_msg.allowRetry == false;
+    // Carried like Initiate_Request does; H3 reads it to decide tracking.
+    tbe.isStreaming := in_msg.isStreaming;
   }
   copyCacheAndDir(cache_entry, getDirEntry(address), tbe, initial);
 
