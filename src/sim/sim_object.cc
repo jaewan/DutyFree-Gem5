@@ -145,6 +145,12 @@ SimObject::serializeAll(const std::string &cpt_dir)
    }
 }
 
+const std::vector<SimObject *> &
+SimObject::getSimObjectList()
+{
+    return simObjectList;
+}
+
 SimObject *
 SimObject::find(const char *name)
 {

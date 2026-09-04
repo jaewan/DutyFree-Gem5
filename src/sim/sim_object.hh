@@ -339,6 +339,13 @@ class SimObject : public EventManager, public Serializable, public Drainable,
     static SimObject *find(const char *name);
 
     /**
+     * All instantiated SimObjects, for functional oracles that must sweep
+     * by type rather than by name (see pseudo_inst::flushrange).  Read-only;
+     * the list itself is owned by SimObject construction.
+     */
+    static const std::vector<SimObject *> &getSimObjectList();
+
+    /**
      * There is a single object name resolver, and it is only set when
      * simulation is restoring from checkpoints.
      *

@@ -69,7 +69,7 @@
 
 #define M5OP_SET_STREAMING      0x55 // Mark VA range as STREAMING (LLC bypass)
 #define M5OP_BIND_POOL          0x56 // Back VA range from a mem pool (SE)
-#define M5OP_RESERVED3          0x57 // Reserved for user
+#define M5OP_FLUSH_RANGE        0x57 // Oracle: invalidate VA range in the LLC
 #define M5OP_RESERVED4          0x58 // Reserved for user
 #define M5OP_RESERVED5          0x59 // Reserved for user
 
@@ -107,6 +107,7 @@
     M5OP(m5_panic, M5OP_PANIC)                                  \
     M5OP(m5_set_streaming, M5OP_SET_STREAMING)                  \
     M5OP(m5_bind_pool, M5OP_BIND_POOL)                          \
+    M5OP(m5_flush_range, M5OP_FLUSH_RANGE)                      \
     M5OP(m5_work_begin, M5OP_WORK_BEGIN)                        \
     M5OP(m5_work_end, M5OP_WORK_END)                            \
     M5OP(m5_dist_toggle_sync, M5OP_DIST_TOGGLE_SYNC)            \

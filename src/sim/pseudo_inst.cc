@@ -42,6 +42,8 @@
 
 #include "sim/pseudo_inst.hh"
 
+#include "mem/ruby/structures/CacheMemory.hh"
+
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -660,6 +662,71 @@ setstreaming(ThreadContext *tc, Addr addr, uint64_t size)
     DPRINTF(PseudoInst,
             "setstreaming: addr=%#x size=%#x -> %d/%d pages marked\n",
             addr, size, marked_pages, total_pages);
+}
+
+void
+flushrange(ThreadContext *tc, Addr addr, uint64_t size)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::flushrange(addr=%#x, size=%#x)\n",
+            addr, size);
+
+    // FLUSH-BEHIND ORACLE.  This is NOT a model of CLFLUSH.  It functionally
+    // invalidates a VA range in the shared LLC (HNF) slices at zero
+    // instruction cost, zero latency and zero fabric traffic -- i.e. the
+    // absolute best case for a flush-behind software strategy.  It exists so
+    // that an object-scoped non-allocation policy can be compared against
+    // flush-behind's *upper bound* rather than against nothing: gem5's CHI has
+    // no handler for RubyRequestType_FLUSH, so a real CLFLUSH is a silent
+    // no-op here, and on silicon the converse holds (flush-behind runs, the
+    // declared type does not exist).  Idealising the competitor errs against
+    // our own thesis, which is the direction an oracle should err in.
+    //
+    // Scope is deliberately the LLC only, matching the reach of the policy it
+    // is compared against.  Private L1/L2 copies are left alone: invalidating
+    // them would give the oracle *more* reach than the mechanism under test
+    // and would also risk tearing down a line with an in-flight transaction.
+    auto *process = tc->getProcessPtr();
+    if (!process) {
+        warn("pseudo_inst::flushrange called outside SE mode, ignored\n");
+        return;
+    }
+
+    EmulationPageTable *pt = process->pTable;
+    const Addr page_size = pt->pageSize();
+    const Addr line_size = 64;
+
+    std::vector<ruby::CacheMemory *> llc;
+    for (auto *obj : SimObject::getSimObjectList()) {
+        auto *cm = dynamic_cast<ruby::CacheMemory *>(obj);
+        if (cm && cm->name().find(".hnf") != std::string::npos)
+            llc.push_back(cm);
+    }
+    if (llc.empty()) {
+        warn_once("pseudo_inst::flushrange: no .hnf CacheMemory found; "
+                  "the oracle invalidated nothing\n");
+        return;
+    }
+
+    uint64_t lines_seen = 0, lines_killed = 0, pages_unmapped = 0;
+    Addr va = addr & ~(line_size - 1);
+    const Addr end = addr + size;
+    for (; va < end; va += line_size) {
+        const Addr page_va = pt->pageAlign(va);
+        const auto *entry = pt->lookup(page_va);
+        if (!entry) { pages_unmapped++; continue; }
+        const Addr pa = entry->paddr + (va - page_va);
+        lines_seen++;
+        for (auto *cm : llc) {
+            if (cm->isTagPresent(pa)) {
+                cm->deallocate(pa);
+                lines_killed++;
+            }
+        }
+    }
+    DPRINTF(PseudoInst,
+            "flushrange: addr=%#x size=%#x -> %llu lines examined, "
+            "%llu invalidated across %zu LLC slices (%llu unmapped pages)\n",
+            addr, size, lines_seen, lines_killed, llc.size(), pages_unmapped);
 }
 
 void
