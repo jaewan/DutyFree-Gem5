@@ -148,6 +148,16 @@ action(AllocateTBE_SeqRequest, desc="") {
       out_msg.is_remote_pf := false;
       out_msg.txnId := max_outstanding_transactions;
       out_msg.ns := !in_msg.isSecure;
+      // STREAMING is a read-epoch capability.  Do not let a malformed PTE
+      // transition, an aliasing bug, or a future privileged path turn a
+      // tagged store/atomic into an H2/H3 coherence-bypass transaction.
+      // Linux rejects PROT_WRITE|PROT_STREAMING, but the protocol must remain
+      // safe independently of that OS invariant.
+      if (in_msg.isStreamingSet() &&
+          (in_msg.Type != RubyRequestType:LD) &&
+          (in_msg.Type != RubyRequestType:IFETCH)) {
+        error("STREAMING request is not a load/fetch");
+      }
       out_msg.isStreaming := in_msg.isStreamingSet();
 
       out_msg.atomic_op.clear();
