@@ -90,6 +90,9 @@ class CacheMemory : public SimObject
     //   a) a tag match on this address or there is
     //   b) an unused line in the same cache "way"
     bool cacheAvail(Addr address) const;
+    // Way-partitioned twins of cacheAvail/allocate: identical except that
+    // only ways in the requestor's mask count as somewhere to put the line.
+    bool cacheAvailPart(Addr address, int requestor) const;
 
     // Returns a NULL entry that acts as a placeholder for invalid lines
     AbstractCacheEntry*
@@ -100,6 +103,8 @@ class CacheMemory : public SimObject
 
     // find an unused entry and sets the tag appropriate for the address
     AbstractCacheEntry* allocate(Addr address, AbstractCacheEntry* new_entry);
+    AbstractCacheEntry *
+    allocatePart(Addr address, AbstractCacheEntry *new_entry, int requestor);
     void allocateVoid(Addr address, AbstractCacheEntry* new_entry)
     {
         allocate(address, new_entry);
@@ -110,6 +115,10 @@ class CacheMemory : public SimObject
 
     // Returns with the physical address of the conflicting cache line
     Addr cacheProbe(Addr address) const;
+    // Way-partitioned twin of cacheProbe: the policy only sees ways in the
+    // requestor's mask. cacheProbeIdle has no twin -- only the SF calls it,
+    // and the SF is not partitioned.
+    Addr cacheProbePart(Addr address, int requestor) const;
 
     // looks an address up in the cache
     AbstractCacheEntry* lookup(Addr address);
@@ -156,6 +165,11 @@ class CacheMemory : public SimObject
   public:
     int getCacheSize() const { return m_cache_size; }
     int getCacheAssoc() const { return m_cache_assoc; }
+
+    // Ways this requestor may allocate into. Every way when partitioning is
+    // off or the requestor has no class, so a node the config never named is
+    // not left with nowhere to allocate.
+    uint64_t wayMask(int requestor) const;
     int getNumBlocks() const { return m_cache_num_sets * m_cache_assoc; }
     Addr getAddressAtIdx(int idx) const;
 
@@ -197,6 +211,9 @@ class CacheMemory : public SimObject
     int m_cache_num_sets;
     int m_cache_num_set_bits;
     int m_cache_assoc;
+
+    // Indexed by requestor node id; see wayMask().
+    std::vector<uint64_t> m_way_masks;
     int m_start_index_bit;
     bool m_resource_stalls;
     int m_block_size;
@@ -228,7 +245,8 @@ class CacheMemory : public SimObject
     private:
       struct CacheMemoryStats : public statistics::Group
       {
-          CacheMemoryStats(statistics::Group *parent);
+          CacheMemoryStats(statistics::Group *parent, int assoc,
+                           int n_requestors);
 
           statistics::Scalar numDataArrayReads;
           statistics::Scalar numDataArrayWrites;
@@ -256,6 +274,12 @@ class CacheMemory : public SimObject
           statistics::Formula m_prefetch_accesses;
 
           statistics::Vector m_accessModeType;
+
+          // Fills per (requestor, way). This is how way partitioning is
+          // verified mechanically: a requestor must never fill a way outside
+          // its mask. Never incremented when way_masks is empty, and nozero
+          // keeps it out of the output entirely in that case.
+          statistics::Vector2d fillsPerWay;
       } cacheMemoryStats;
 
     public:

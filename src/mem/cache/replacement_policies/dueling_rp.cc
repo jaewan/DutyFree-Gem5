@@ -112,8 +112,14 @@ Dueling::getVictim(const ReplacementCandidates& candidates) const
     // This function assumes that all candidates are either part of the same
     // sampled set, or are not samples.
     // @todo This should be improved at some point.
-    panic_if(candidates.size() != params().team_size, "We currently only "
-        "support team sizes that match the number of replacement candidates");
+    // A way-partitioned caller offers only the ways its class may allocate
+    // into, which is a subset of one set. That is fine here: the team is read
+    // off candidates[0] and every candidate is re-checked against it below,
+    // and the victim search itself is delegated to RRIP/BRRIP, which scan the
+    // list they are handed. More candidates than a team holds would still mean
+    // the caller spanned sets, which is a bug.
+    panic_if(candidates.size() > params().team_size,
+             "Replacement candidates must fit within a single team");
 
     // The team with the most misses loses
     bool winner = !duelingMonitor.getWinner();

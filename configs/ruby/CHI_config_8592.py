@@ -782,13 +782,19 @@ class CHI_HNF(CHI_Node):
 
         ll_cache = llcache_type(start_index_bit=intlvHighBit + 1)
 
-        # LLC replacement policy (env HNF_RP). Unset means LRU, which is what the
-        # CAT-style way partitioning is built on: a masked candidate set is a
-        # subset of the ways, and TreePLRU walks its bit tree by way position, so
-        # it names a way the caller never offered. Leaving RubyCache's own
-        # TreePLRURP default in place is how SE full, FS full and the first
+        # LLC replacement policy (env HNF_RP). Unset means LRU -- a plain
+        # baseline, and what the sweeps are standardized on. Leaving RubyCache's
+        # own TreePLRURP default in place is how SE full, FS full and the first
         # 16-core sweep silently ran TreePLRU while only the RP sweep named its
         # policy. Pass HNF_RP=treeplru for the old default.
+        #
+        # TreePLRU is also the one policy way partitioning (HNF_CAT_*) cannot
+        # use, which is the other reason it is no longer the default. Every
+        # other policy here picks out of the candidate list it is handed, so a
+        # list masked down to one class's ways just works. TreePLRU keeps its
+        # state outside the entries -- one bit tree per set -- and *computes* a
+        # way from the walk, then indexes the candidate list with that way
+        # number, so a partial list lands on the wrong candidate or past its end.
         #
         # #28 needs a reuse predictor at the LLC to compare declaration
         # against prediction. SHiP is the only one in this tree (Hawkeye and
