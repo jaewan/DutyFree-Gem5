@@ -609,6 +609,12 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     DataBlock DataBlk,  desc="data for the block";
     bool HWPrefetched,  default="false", desc="Set if this cache entry was prefetched";
     bool isStreaming,   default="false", desc="STREAMING hint: skip L3 allocation";
+    // Fixed when the block is filled and never revised, unlike isStreaming,
+    // which every access refreshes from the request. It has to agree with
+    // whether that same fill was enrolled upstream: a block cached before the
+    // epoch is tracked and stays tracked, however the page is marked later.
+    // H3 sends no eviction message, so nothing can propagate a later change.
+    bool isTracked,     default="true",  desc="a level above recorded this copy";
     RequestorID requestor,  desc="First requestor to fill this block";
   }
 
@@ -759,6 +765,10 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     WriteMask snd_pendBytes,    desc="Which bytes are pending transmission";
     CHIDataType snd_msgType,    desc="Type of message being sent";
     MachineID snd_destination,  desc="Data destination";
+
+    // Carries the victim's CacheEntry.isTracked through a replacement, so the
+    // eviction knows whether anyone above is expecting to be told about it.
+    bool isTracked,                   desc="a level above recorded this copy";
 
     // Tracks how to update the directory when receiving a CompAck
     bool updateDirOnCompAck,          desc="Update directory on CompAck";

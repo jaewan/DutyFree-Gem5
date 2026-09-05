@@ -180,10 +180,10 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
             if cxl_enabled and issubclass(mem_type, m5.objects.SimpleMemory):
                 if ri == 0:
                     mem_ctrl.latency = getattr(
-                        options, "dram_latency", "150ns"
+                        options, "dram_latency", "100ns"
                     )
                 else:
-                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "200ns")
             if options.access_backing_store:
                 dram_intf.kvm_map = False
             mem_ctrl.port = dir_cntrl.memory_out_port
@@ -224,10 +224,10 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
                 mem_type, m5.objects.SimpleMemory
             ):
                 if ri == len(system.mem_ranges) - 1:
-                    mem_ctrl.latency = getattr(options, "cxl_latency", "300ns")
+                    mem_ctrl.latency = getattr(options, "cxl_latency", "200ns")
                 else:
                     mem_ctrl.latency = getattr(
-                        options, "dram_latency", "150ns"
+                        options, "dram_latency", "100ns"
                     )
 
             if options.access_backing_store:

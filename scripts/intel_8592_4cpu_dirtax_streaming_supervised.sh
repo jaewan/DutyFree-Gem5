@@ -45,7 +45,7 @@ COMMON=(
   --l1d_size=48KiB --l1d_assoc=12 --l1i_size=32KiB --l1i_assoc=8
   --l2_size=2MiB --l2_assoc=16 --l3_size=5MiB --l3_assoc=20
   --mem-type=SimpleMemory --mem-size=8GiB --cxl-mem-size=4GiB
-  --dram-latency=150ns --cxl-latency=300ns
+  --dram-latency=100ns --cxl-latency=200ns
 )
 
 mkdir -p "$OUT"
@@ -127,5 +127,5 @@ SA="$ROOT/testcase/dutyfree/aggressor"
 # was truncated spends hours producing a comparison that cannot be made.
 run_arm alone          "$V;$D;$D;$D"    "$WSS_KIB $ITERS;;;"          || { echo "TRIO ABORTED at 'alone'" >&2; exit 3; }
 run_arm with_agg       "$V;$A;$A;$A"    "$WSS_KIB $ITERS;$AGG_MB;$AGG_MB;$AGG_MB"  || { echo "TRIO ABORTED at 'with_agg'" >&2; exit 3; }
-run_arm with_streaming "$V;$SA;$SA;$SA" "$WSS_KIB $ITERS;$AGG_MB;$AGG_MB;$AGG_MB"  || { echo "TRIO ABORTED at 'with_streaming'" >&2; exit 3; }
+run_arm with_streaming "$V;$SA;$SA;$SA" "$WSS_KIB $ITERS;$AGG_MB stream;$AGG_MB stream;$AGG_MB stream"  || { echo "TRIO ABORTED at 'with_streaming'" >&2; exit 3; }
 echo "TRIO COMPLETE: $OUT"

@@ -782,11 +782,19 @@ class CHI_HNF(CHI_Node):
 
         ll_cache = llcache_type(start_index_bit=intlvHighBit + 1)
 
-        # LLC replacement policy (env HNF_RP). Unset keeps whatever
-        # llcache_type specifies; RubyCache's default is TreePLRURP, which is
-        # what every published number in this project was produced with -- so
-        # an unset environment reproduces prior behaviour exactly, and any
-        # comparison must name TreePLRU rather than assume LRU.
+        # LLC replacement policy (env HNF_RP). Unset means LRU -- a plain
+        # baseline, and what the sweeps are standardized on. Leaving RubyCache's
+        # own TreePLRURP default in place is how SE full, FS full and the first
+        # 16-core sweep silently ran TreePLRU while only the RP sweep named its
+        # policy. Pass HNF_RP=treeplru for the old default.
+        #
+        # TreePLRU is also the one policy way partitioning (HNF_CAT_*) cannot
+        # use, which is the other reason it is no longer the default. Every
+        # other policy here picks out of the candidate list it is handed, so a
+        # list masked down to one class's ways just works. TreePLRU keeps its
+        # state outside the entries -- one bit tree per set -- and *computes* a
+        # way from the walk, then indexes the candidate list with that way
+        # number, so a partial list lands on the wrong candidate or past its end.
         #
         # #28 needs a reuse predictor at the LLC to compare declaration
         # against prediction. SHiP is the only one in this tree (Hawkeye and
@@ -797,10 +805,38 @@ class CHI_HNF(CHI_Node):
             ll_cache.replacement_policy = SHiPMemRP()
         elif _rp == "brrip":
             ll_cache.replacement_policy = BRRIPRP()
-        elif _rp == "lru":
+        elif _rp == "srrip":
+            ll_cache.replacement_policy = RRIPRP()
+        elif _rp == "drrip":
+            _leaders = int(os.environ.get("HNF_RP_LEADERS", 32))
+            _sets = int(ll_cache.size.value) // (
+                int(ruby_system.block_size_bytes) * ll_cache.assoc.value
+            )
+            if _sets < 2 * _leaders:
+                m5.fatal(
+                    "LLC has %d sets; DRRIP with %d leader sets per team "
+                    "leaves no followers. Lower HNF_RP_LEADERS.",
+                    _sets,
+                    _leaders,
+                )
+            ll_cache.replacement_policy = DRRIPRP(
+                constituency_size=(_sets // _leaders) * ll_cache.assoc.value,
+                team_size=ll_cache.assoc.value,
+                replacement_policy_a=BRRIPRP(),
+                replacement_policy_b=RRIPRP(),
+            )
+        elif _rp == "nru":
+            # NRURP is BRRIP with num_bits=1, btp=100 -- RRIP's one-bit form.
+            ll_cache.replacement_policy = NRURP()
+        elif _rp in ("", "default", "lru"):
             ll_cache.replacement_policy = LRURP()
-        elif _rp not in ("", "default", "treeplru", "tree_plru"):
-            m5.fatal("unknown HNF_RP=%s (ship|brrip|lru|treeplru)", _rp)
+        elif _rp in ("treeplru", "tree_plru"):
+            pass  # leave llcache_type's own default
+        else:
+            m5.fatal(
+                "unknown HNF_RP=%s (ship|srrip|brrip|drrip|lru|nru|treeplru)",
+                _rp,
+            )
 
         self._cntrl = CHI_HNFController(
             ruby_system, ll_cache, NULL, addr_ranges

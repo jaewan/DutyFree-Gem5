@@ -68,10 +68,10 @@ operator<<(std::ostream& out, const CacheMemory& obj)
 
 CacheMemory::CacheMemory(const Params &p)
     : SimObject(p),
-    dataArray(p.dataArrayBanks, p.dataAccessLatency, p.start_index_bit),
-    tagArray(p.tagArrayBanks, p.tagAccessLatency, p.start_index_bit),
-    atomicALUArray(p.atomicALUs, p.atomicLatency),
-    cacheMemoryStats(this)
+      dataArray(p.dataArrayBanks, p.dataAccessLatency, p.start_index_bit),
+      tagArray(p.tagArrayBanks, p.tagAccessLatency, p.start_index_bit),
+      atomicALUArray(p.atomicALUs, p.atomicLatency),
+      cacheMemoryStats(this, p.assoc, p.way_masks.size())
 {
     m_cache_size = p.size;
     m_cache_assoc = p.assoc;
@@ -82,6 +82,21 @@ CacheMemory::CacheMemory(const Params &p)
     m_block_size = p.block_size;  // may be 0 at this point. Updated in init()
     m_use_occupancy = dynamic_cast<replacement_policy::WeightedLRU*>(
                                     m_replacementPolicy_ptr) ? true : false;
+    m_way_masks.assign(p.way_masks.begin(), p.way_masks.end());
+}
+
+uint64_t
+CacheMemory::wayMask(int requestor) const
+{
+    uint64_t all =
+        (m_cache_assoc >= 64) ? ~0ULL : ((1ULL << m_cache_assoc) - 1);
+    if (m_way_masks.empty()) {
+        return all;
+    }
+    if (requestor < 0 || requestor >= (int)m_way_masks.size()) {
+        return all;
+    }
+    return m_way_masks[requestor] ? m_way_masks[requestor] : all;
 }
 
 void
@@ -331,6 +346,99 @@ CacheMemory::allocate(Addr address, AbstractCacheEntry *entry)
     panic("Allocate didn't find an available entry");
 }
 
+bool
+CacheMemory::cacheAvailPart(Addr address, int requestor) const
+{
+    assert(address == makeLineAddress(address));
+
+    uint64_t mask = wayMask(requestor);
+    int64_t cacheSet = addressToCacheSet(address);
+
+    for (int i = 0; i < m_cache_assoc; i++) {
+        AbstractCacheEntry *entry = m_cache[cacheSet][i];
+        if (entry != NULL) {
+            // A resident line counts wherever it sits. Partitioning bounds
+            // where a requestor may allocate, not what it may hit, and calling
+            // a line outside the mask absent would allocate it a second time.
+            if (entry->m_Address == address) {
+                return true;
+            }
+            if (((mask >> i) & 1) == 0) {
+                continue;
+            }
+            if (entry->m_Permission == AccessPermission_NotPresent) {
+                // Already in the cache or we found an empty entry
+                return true;
+            }
+        } else if ((mask >> i) & 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+AbstractCacheEntry *
+CacheMemory::allocatePart(Addr address, AbstractCacheEntry *entry,
+                          int requestor)
+{
+    assert(address == makeLineAddress(address));
+    assert(!isTagPresent(address));
+    assert(cacheAvailPart(address, requestor));
+    DPRINTF(RubyCache, "allocating address: %#x\n", address);
+
+    entry->initBlockSize(m_block_size);
+    entry->setRubySystem(m_ruby_system);
+
+    // Find the first open slot
+    uint64_t mask = wayMask(requestor);
+    int64_t cacheSet = addressToCacheSet(address);
+    std::vector<AbstractCacheEntry *> &set = m_cache[cacheSet];
+    for (int i = 0; i < m_cache_assoc; i++) {
+        if (((mask >> i) & 1) == 0) {
+            continue;
+        }
+        if (!set[i] || set[i]->m_Permission == AccessPermission_NotPresent) {
+            if (set[i] && (set[i] != entry)) {
+                warn_once(
+                    "This protocol contains a cache entry handling bug: "
+                    "Entries in the cache should never be NotPresent! If\n"
+                    "this entry (%#x) is not tracked elsewhere, it will "
+                    "memory "
+                    "leak here. Fix your protocol to eliminate these!",
+                    address);
+            }
+            set[i] = entry; // Init entry
+            set[i]->m_Address = address;
+            set[i]->m_Permission = AccessPermission_Invalid;
+            DPRINTF(RubyCache, "Allocate clearing lock for addr: 0x%x\n",
+                    address);
+            set[i]->m_locked = -1;
+            m_tag_index[address] = i;
+            set[i]->setPosition(cacheSet, i);
+            set[i]->replacementData = replacement_data[cacheSet][i];
+            set[i]->setLastAccess(curTick());
+
+            // Call reset function here to set initial value for different
+            // replacement policies.
+            if (!m_way_masks.empty()) {
+                // Requestors the config never named share row 0; they are
+                // unpartitioned anyway, so the row only says "somebody
+                // unclassified filled here".
+                int row =
+                    (requestor >= 0 && requestor < (int)m_way_masks.size())
+                        ? requestor
+                        : 0;
+                cacheMemoryStats.fillsPerWay[row][i]++;
+            }
+
+            m_replacementPolicy_ptr->reset(entry->replacementData);
+
+            return entry;
+        }
+    }
+    panic("allocatePart: no way available in mask %#lx", mask);
+}
+
 void
 CacheMemory::deallocate(Addr address)
 {
@@ -360,6 +468,75 @@ CacheMemory::cacheProbe(Addr address) const
     }
     return m_cache[cacheSet][m_replacementPolicy_ptr->
                         getVictim(candidates)->getWay()]->m_Address;
+}
+
+// Same as cacheProbe, except only ways in the requestor's mask are offered to
+// the replacement policy. This is what makes partitioning an isolation
+// guarantee rather than a hint: a requestor can only ever evict out of its own
+// ways, so its allocations cannot displace another class's lines.
+//
+// The candidate list is a subset of the set, so the policy has to be one that
+// picks out of the list it is handed. Every policy the config offers does,
+// except TreePLRU, which computes a way from its bit-tree walk and then uses
+// that way number to index the candidate list. The config rejects it when
+// way_masks is set.
+Addr
+CacheMemory::cacheProbePart(Addr address, int requestor) const
+{
+    assert(address == makeLineAddress(address));
+    assert(!cacheAvailPart(address, requestor));
+
+    uint64_t mask = wayMask(requestor);
+    int64_t cacheSet = addressToCacheSet(address);
+    std::vector<ReplaceableEntry *> candidates;
+    for (int i = 0; i < m_cache_assoc; i++) {
+        if (((mask >> i) & 1) == 0) {
+            continue;
+        }
+        candidates.push_back(
+            static_cast<ReplaceableEntry *>(m_cache[cacheSet][i]));
+    }
+    return m_cache[cacheSet]
+                  [m_replacementPolicy_ptr->getVictim(candidates)->getWay()]
+                      ->m_Address;
+}
+
+// Same as cacheProbe, except a way holding a line with a transaction in flight
+// is not offered to the replacement policy: a transient entry cannot be
+// evicted, and a protocol that waits for one instead can close a wait cycle
+// with a second structure that is waiting the other way round. The protocol
+// marks transient entries via changePermission(Busy).
+Addr
+CacheMemory::cacheProbeIdle(Addr address) const
+{
+    assert(address == makeLineAddress(address));
+    assert(!cacheAvail(address)); // so every way is occupied
+
+    // The policy has to see the whole set: TreePLRU (RubyCache's default)
+    // computes a way from its bit-tree walk and then uses that way number to
+    // index the candidate list, so a filtered list lands on the wrong entry or
+    // runs off its end. Take its choice first and only override one that
+    // cannot be evicted.
+    Addr victim = cacheProbe(address);
+    int64_t cacheSet = addressToCacheSet(address);
+    int loc = findTagInSet(cacheSet, victim);
+    if ((loc != -1) &&
+        (m_cache[cacheSet][loc]->m_Permission != AccessPermission_Busy)) {
+        return victim;
+    }
+
+    // The policy picked a line with a transaction in flight. Take the first
+    // way that has none; this is rare enough that departing from the policy's
+    // order is not worth more machinery.
+    for (int i = 0; i < m_cache_assoc; i++) {
+        AbstractCacheEntry *entry = m_cache[cacheSet][i];
+        if (entry->m_Permission != AccessPermission_Busy) {
+            return entry->m_Address;
+        }
+    }
+
+    // Every way is in flight; the caller still has to cope with a busy victim.
+    return victim;
 }
 
 // looks an address up in the cache
@@ -545,8 +722,8 @@ CacheMemory::isLocked(Addr address, int context)
     return entry->isLocked(context);
 }
 
-CacheMemory::
-CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
+CacheMemory::CacheMemoryStats::CacheMemoryStats(statistics::Group *parent,
+                                                int assoc, int n_requestors)
     : statistics::Group(parent),
       ADD_STAT(numDataArrayReads, "Number of data array reads"),
       ADD_STAT(numDataArrayWrites, "Number of data array writes"),
@@ -555,7 +732,8 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
       ADD_STAT(numTagArrayStalls, "Number of stalls caused by tag array"),
       ADD_STAT(numDataArrayStalls, "Number of stalls caused by data array"),
       ADD_STAT(numAtomicALUOperations, "Number of atomic ALU operations"),
-      ADD_STAT(numAtomicALUArrayStalls, "Number of stalls caused by atomic ALU array"),
+      ADD_STAT(numAtomicALUArrayStalls,
+               "Number of stalls caused by atomic ALU array"),
       ADD_STAT(htmTransCommitReadSet, "Read set size of a committed "
                                       "transaction"),
       ADD_STAT(htmTransCommitWriteSet, "Write set size of a committed "
@@ -571,7 +749,9 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
       ADD_STAT(m_prefetch_misses, "Number of cache prefetch misses"),
       ADD_STAT(m_prefetch_accesses, "Number of cache prefetch accesses",
                m_prefetch_hits + m_prefetch_misses),
-      ADD_STAT(m_accessModeType, "")
+      ADD_STAT(m_accessModeType, ""),
+      ADD_STAT(fillsPerWay, "Fills per requestor and way; way partitioning "
+                            "verification, empty unless way_masks is set")
 {
     numDataArrayReads
         .flags(statistics::nozero);
@@ -636,6 +816,12 @@ CacheMemoryStats::CacheMemoryStats(statistics::Group *parent)
             .flags(statistics::nozero)
             ;
     }
+
+    // One row per requestor the config named a mask for. A cache with no
+    // way_masks never touches this, and nozero then keeps every cell out of
+    // the output, so an unpartitioned run's stats file is unchanged.
+    fillsPerWay.init(n_requestors > 0 ? n_requestors : 1, assoc)
+        .flags(statistics::nozero | statistics::nonan);
 }
 
 // assumption: SLICC generated files will only call this function

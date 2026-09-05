@@ -63,14 +63,14 @@ def define_options(parser):
     parser.add_argument(
         "--dram-latency",
         type=str,
-        default="150ns",
+        default="100ns",
         dest="dram_latency",
         help="SimpleMemory latency for the DRAM range (pool 0)",
     )
     parser.add_argument(
         "--cxl-latency",
         type=str,
-        default="300ns",
+        default="200ns",
         dest="cxl_latency",
         help="SimpleMemory latency for the CXL range (pool 1)",
     )
@@ -95,6 +95,124 @@ def read_config_file(file):
     chi_configs = types.ModuleType(loader.name)
     loader.exec_module(chi_configs)
     return chi_configs
+
+
+# ---------------------------------------------------------------- Intel CAT
+# pqos syntax, so a configuration moves between here and a real machine
+# unchanged:
+#     pqos -e "llc:1=0x00ff;llc:2=0x3f00"     HNF_CAT_E
+#     pqos -a "llc:1=0;llc:2=1,2,3"           HNF_CAT_A
+# Cores no association names stay in COS 0, which pqos -R defines as every way.
+def _cat_parse_e(spec, assoc):
+    cos = {}
+    for item in spec.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        res, rest = item.split(":", 1)
+        if res.strip() != "llc":
+            m5.fatal("HNF_CAT_E: only 'llc' is modelled, got '%s'", res)
+        cid, mask = rest.split("=", 1)
+        m = int(mask.strip(), 16)
+        if m == 0:
+            m5.fatal("HNF_CAT_E: COS%s mask is empty; CAT faults on that", cid)
+        if m >> assoc:
+            m5.fatal(
+                "HNF_CAT_E: COS%s mask %#x exceeds %d ways", cid, m, assoc
+            )
+        # Classic CAT requires a contiguous CBM and #GPs otherwise; newer parts
+        # relax it behind CPUID.10H.1:ECX[2]. Refusing it keeps every
+        # configuration reproducible on hardware without that bit.
+        low = m & -m
+        if (m + low) & (m + low - 1):
+            m5.fatal("HNF_CAT_E: COS%s mask %#x is not contiguous", cid, m)
+        cos[int(cid)] = m
+    return cos
+
+
+def _cat_parse_a(spec):
+    assoc = {}
+    for item in spec.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        res, rest = item.split(":", 1)
+        if res.strip() != "llc":
+            m5.fatal("HNF_CAT_A: only 'llc' is modelled, got '%s'", res)
+        cid, cores = rest.split("=", 1)
+        for tok in cores.split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if "-" in tok:
+                lo, hi = (int(x) for x in tok.split("-", 1))
+            else:
+                lo = hi = int(tok)
+            for c in range(lo, hi + 1):
+                assoc[c] = int(cid)
+    return assoc
+
+
+def _cat_apply(ruby_system, cpus):
+    spec_e = os.environ.get("HNF_CAT_E", "")
+    spec_a = os.environ.get("HNF_CAT_A", "")
+    if not spec_e and not spec_a:
+        return
+    llc_assoc = int(ruby_system.hnf[0]._cntrl.cache.assoc)
+
+    # Way partitioning hands the replacement policy a candidate list narrowed
+    # to the requestor's ways, so the policy has to be one that picks out of
+    # the list it is given. Only TreePLRU does not. Checked against the policy
+    # object rather than HNF_RP so RubyCache's own default is caught too.
+    #
+    # DRRIP is deliberately allowed: real Intel LLCs run an adaptive
+    # set-dueling policy and CAT at the same time -- Vila et al. (PLDI'20)
+    # located Skylake's leader sets while using CAT to cut L3 associativity to
+    # 4 -- so partitioning only the non-adaptive policies would model a
+    # combination nobody ships. Leader sets are partitioned like every other
+    # set, which is what keeps them representative of the followers.
+    _rp_name = type(
+        ruby_system.hnf[0]._cntrl.cache.replacement_policy
+    ).__name__
+    if _rp_name == "TreePLRURP":
+        m5.fatal(
+            "HNF_CAT_* cannot be used with TreePLRU: it computes a way from "
+            "a per-set bit tree and then indexes the candidate list with "
+            "that way number, so a partial list lands on the wrong entry or "
+            "past its end"
+        )
+
+    cos = _cat_parse_e(spec_e, llc_assoc)
+    core2cos = _cat_parse_a(spec_a)
+    if len(cos) > 16:
+        m5.fatal("HNF_CAT_E: %d classes; CAT gives 16", len(cos))
+    cos.setdefault(0, (1 << llc_assoc) - 1)
+    for c in set(core2cos.values()):
+        if c not in cos:
+            m5.fatal("HNF_CAT_A: COS%d has no mask in HNF_CAT_E", c)
+
+    # way_masks is indexed by the requestor's Cache-controller version, and the
+    # L2s sit after every L1, so the offset moves with the core count. Ask each
+    # controller for its own number rather than computing one.
+    vers = [int(cpu.l2.version) for cpu in cpus]
+    vec = [0] * (max(vers) + 1)
+    for i, v in enumerate(vers):
+        vec[v] = cos[core2cos.get(i, 0)]
+    for hnf in ruby_system.hnf:
+        hnf._cntrl.cache.way_masks = vec
+
+    print("L3CA COS definitions:")
+    for c in sorted(cos):
+        print(
+            "    L3CA COS%d => MASK %#07x (%2d ways)"
+            % (c, cos[c], bin(cos[c]).count("1"))
+        )
+    print("Core association:")
+    for i, v in enumerate(vers):
+        print(
+            "    Core %d => COS%d   (requestor v%d, mask %#07x)"
+            % (i, core2cos.get(i, 0), v, vec[v])
+        )
 
 
 def create_system(
@@ -266,6 +384,8 @@ def create_system(
         CHI_HNF(i, ruby_system, HNFCache, None)
         for i in range(options.num_l3caches)
     ]
+
+    _cat_apply(ruby_system, cpus)
 
     for hnf in ruby_system.hnf:
         network_nodes.append(hnf)

@@ -38,7 +38,12 @@
 
 #define MAX_MB 512
 #define UNROLL 16
-static long arr[(long)MAX_MB * 1024 * 1024 / sizeof(long)];
+/* Page-aligned so the sealed range is exactly the scanned range. Marking is
+ * page-granular: an unaligned array would leave its first and last partial
+ * pages unsealed -- those lines would run as WB inside the H2/H3 arm -- and
+ * would pull whatever shares those pages into the read-only epoch. */
+static long arr[(long)MAX_MB * 1024 * 1024 / sizeof(long)]
+    __attribute__((aligned(4096)));
 
 int main(int argc, char *argv[])
 {

@@ -54,3 +54,8 @@ class RubyCache(SimObject):
     dataAccessLatency = Param.Cycles(1, "cycles for a data array access")
     tagAccessLatency = Param.Cycles(1, "cycles for a tag array access")
     resourceStalls = Param.Bool(False, "stall if there is a resource failure")
+    # Intel-CAT-style way partitioning, indexed by the requestor's node id.
+    # Empty means no partitioning; a zero entry means that requestor may use
+    # every way, which is CAT's COS 0 default and what a node the config never
+    # named -- an RN-I doing DMA, say -- needs so it can still allocate.
+    way_masks = VectorParam.UInt64([], "per-requestor way bitmask")
