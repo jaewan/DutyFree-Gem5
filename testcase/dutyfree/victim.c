@@ -16,10 +16,16 @@
 
 /* x86 gem5 pseudo-instructions: opcode 0F 04, function byte, 0x00 */
 static inline void gem5_exit(void) {
-    __asm__ volatile(".byte 0x0f, 0x04, 0x21, 0x00" : : "D"(0ULL));
+    unsigned long m5_rax;
+    __asm__ volatile(".byte 0x0f, 0x04, 0x21, 0x00"
+                     : "=a"(m5_rax) : "D"(0ULL));
+    (void)m5_rax;
 }
 static inline void gem5_reset_stats(void) {
-    __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00" : : "D"(0ULL), "S"(0ULL));
+    unsigned long m5_rax;
+    __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00"
+                     : "=a"(m5_rax) : "D"(0ULL), "S"(0ULL));
+    (void)m5_rax;
 }
 
 #define MAX_KB (256 * 1024)

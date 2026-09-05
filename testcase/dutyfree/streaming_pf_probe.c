@@ -17,8 +17,10 @@
  */
 
 static inline void gem5_set_streaming(void *addr, long size) {
+    unsigned long m5_rax;
     __asm__ volatile(".byte 0x0f, 0x04, 0x55, 0x00"
-                     : : "D"((long)addr), "S"(size) : "rax");
+                     : "=a"(m5_rax) : "D"((long)addr), "S"(size));
+    (void)m5_rax;
 }
 
 #define MB   32

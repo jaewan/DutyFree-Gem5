@@ -16,14 +16,22 @@
  * streaming → warmup + measured reads are read-only (no write in the epoch). */
 
 static inline void gem5_set_streaming(void *addr, long size) {
+    unsigned long m5_rax;
     __asm__ volatile(".byte 0x0f, 0x04, 0x55, 0x00"
-                     : : "D"((long)addr), "S"(size) : "rax");
+                     : "=a"(m5_rax) : "D"((long)addr), "S"(size));
+    (void)m5_rax;
 }
 static inline void gem5_exit(void) {
-    __asm__ volatile(".byte 0x0f, 0x04, 0x21, 0x00" : : "D"(0ULL));
+    unsigned long m5_rax;
+    __asm__ volatile(".byte 0x0f, 0x04, 0x21, 0x00"
+                     : "=a"(m5_rax) : "D"(0ULL));
+    (void)m5_rax;
 }
 static inline void gem5_reset_stats(void) {
-    __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00" : : "D"(0ULL), "S"(0ULL));
+    unsigned long m5_rax;
+    __asm__ volatile(".byte 0x0f, 0x04, 0x40, 0x00"
+                     : "=a"(m5_rax) : "D"(0ULL), "S"(0ULL));
+    (void)m5_rax;
 }
 
 #define MAX_MB 512
